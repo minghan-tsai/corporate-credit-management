@@ -41,7 +41,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 ### 系統控制 Domain
 
 6. **User** — 銀行內部系統使用者。
-7. **Role** — RM、REVIEWER 或 ADMIN 其中之一。
+7. **Role** — 系統角色，目前規劃包含 RM、REVIEWER、ADMIN。
 
 ### 橫向 Domain
 
@@ -437,4 +437,9 @@ Stage 0 僅包含：
 - 專案規劃與簡介文件。
 - Repository Ignore Rules。
 
-Stage 0 Scope 已通過人工 Review，並已核准進行 Git／GitHub 收尾。尚未開始任何 Stage 1 業務或技術功能實作；Stage 1 必須在本次收尾後，作為獨立且明確經過 Review 的步驟開始。
+Stage 0 已完成，狀態如下：
+
+- 已通過人工 Review。
+- `mvnw test` 與 `mvnw package` 驗證成功。
+- Git／GitHub 收尾已完成。
+- 尚未進入 Stage 1。

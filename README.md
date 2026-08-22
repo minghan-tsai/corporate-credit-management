@@ -27,6 +27,6 @@ Corporate Credit Management System 是一個以 Java 與 Spring Boot 開發的�
 
 ## 目前狀態
 
-**Stage 0 — 專案規劃與初始化**
+**Stage 0 — 已完成**
 
-目前僅有最小化的 Spring Boot Application Skeleton、Build 設定與規劃文件。尚未實作任何業務 Domain、API、Security Flow、Database Migration、Docker 設定或 CI Workflow。
+目前僅完成專案規劃、開發環境、最小化 Spring Boot Application Skeleton 與 Build Configuration。尚未開始 Stage 1 業務功能實作，也尚未實作任何正式 Domain、API、Security Flow、Database Migration、Docker 設定或 CI Workflow。
