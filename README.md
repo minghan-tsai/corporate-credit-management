@@ -1,32 +1,32 @@
 # Corporate Credit Management System
 
-## Project Purpose
+## 專案目的
 
-Corporate Credit Management System is a Java and Spring Boot portfolio project that models a focused subset of a bank-internal corporate lending workflow. The project is intended to demonstrate business-rule design, layered architecture, transaction integrity, authorization, auditability, and automated testing without attempting to reproduce a complete core banking system.
+Corporate Credit Management System 是一個以 Java 與 Spring Boot 開發的作品集專案，模擬銀行內部企業授信流程中一個聚焦的範圍。本專案旨在展示 Business Rule 設計、Layered Architecture、Transaction 完整性、授權控管、可稽核性與自動化測試，但不試圖重現完整的銀行核心系統。
 
-## Planned Features
+## 規劃功能
 
-- Corporate customer management
-- Credit application drafting and submission
-- Reviewer approval or rejection with Maker-Checker controls
-- Approved credit-limit management
-- Drawdown processing with transactional consistency
-- Role-based access control for RM, REVIEWER, and ADMIN
-- Business audit trail
-- Validation, exception handling, filtering, and pagination
-- Unit, integration, security, and transaction tests
+- 企業客戶管理
+- 授信申請草稿與送審
+- 具備 Maker-Checker 控制的審核核准或駁回
+- 核准授信額度管理
+- 具備 Transaction 一致性的 Drawdown 處理
+- RM、REVIEWER 與 ADMIN 的 RBAC
+- 業務 Audit Trail
+- Validation、Exception Handling、Filtering 與 Pagination
+- Unit Test、Integration Test、Security Test 與 Transaction Test
 
-## Planned Tech Stack
+## 規劃 Tech Stack
 
 - Java 21
-- Spring Boot 3.x and Maven
-- Spring Web, Spring Data JPA, Spring Security, and Spring Validation
-- PostgreSQL, Hibernate, and Flyway
-- JUnit 5, Mockito, Spring Boot Test, and optionally Testcontainers
-- Later stages: Docker Compose and GitHub Actions
+- Spring Boot 3.x 與 Maven
+- Spring Web、Spring Data JPA、Spring Security 與 Spring Validation
+- PostgreSQL、Hibernate 與 Flyway
+- JUnit 5、Mockito、Spring Boot Test，以及選配的 Testcontainers
+- 後期階段：Docker Compose 與 GitHub Actions
 
-## Current Status
+## 目前狀態
 
-**Stage 0 — Project Planning and Initialization**
+**Stage 0 — 專案規劃與初始化**
 
-Only the minimal Spring Boot application skeleton, build configuration, and planning documentation exist. No business domain, API, security flow, database migration, Docker setup, or CI workflow has been implemented.
+目前僅有最小化的 Spring Boot Application Skeleton、Build 設定與規劃文件。尚未實作任何業務 Domain、API、Security Flow、Database Migration、Docker 設定或 CI Workflow。
