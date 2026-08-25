@@ -27,6 +27,26 @@ Corporate Credit Management System 是一個以 Java 與 Spring Boot 開發的�
 
 ## 目前狀態
 
-**Stage 0 — 已完成**
+**Stage 1 — 已完成**
 
-目前僅完成專案規劃、開發環境、最小化 Spring Boot Application Skeleton 與 Build Configuration。尚未開始 Stage 1 業務功能實作，也尚未實作任何正式 Domain、API、Security Flow、Database Migration、Docker 設定或 CI Workflow。
+Stage 1 已完成 Spring Boot 基礎 Skeleton：
+
+- Spring Boot 可正常啟動。
+- Embedded Tomcat 使用 port 8080。
+- 建立 `controller`、`service`、`repository`、`config` 基礎分層。
+- 建立 `HealthController` 與 `HealthService`。
+- 使用 Constructor Injection。
+- 建立 `GET /api/health`。
+- 建立 `SecurityConfig`：`/api/health` 設為 `permitAll`，其餘 Request 要求 `authenticated`。此項僅為基礎存取規則，尚未完成正式 Authentication、JWT 或 RBAC。
+- `mvnw test` lifecycle 成功，但目前尚無正式 automated test。
+- `mvnw package` 成功並產生可執行 JAR。
+
+目前尚未完成：
+
+- PostgreSQL Connection
+- JPA／Entity／Repository 實作
+- Flyway Migration
+- 正式 Authentication／JWT／RBAC
+- Business Rules
+- Automated Test Case
+- Docker／CI

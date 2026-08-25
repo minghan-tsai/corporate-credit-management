@@ -364,9 +364,9 @@ Codex 不得代替使用者完整撰寫核心實作。
 | Stage | 日期 | 規劃成果 |
 | --- | --- | --- |
 | Stage 0 | 8/21–8/22 | 規劃、環境、文件與最小化專案初始化 |
-| Stage 1 | 8/23 | Spring Boot 基礎 Skeleton |
-| Stage 2 | 8/24–8/25 | PostgreSQL、JPA、Flyway、Company |
-| Stage 3 | 8/26–8/27 | CreditApplication 與 Submit |
+| Stage 1 | 8/23–8/25 | Spring Boot 基礎 Skeleton |
+| Stage 2 | 8/26 | PostgreSQL、JPA、Flyway、Company |
+| Stage 3 | 8/27 | CreditApplication 與 Submit |
 | Stage 4 | 8/28–8/29 | CreditReview、Approve／Reject、CreditLimit |
 | Stage 5 | 8/30–8/31 | Spring Security、JWT、RBAC、Maker-Checker |
 | 不安排電腦開發 | 9/1–9/2 | 不安排任何 Implementation 工作 |
@@ -442,4 +442,29 @@ Stage 0 已完成，狀態如下：
 - 已通過人工 Review。
 - `mvnw test` 與 `mvnw package` 驗證成功。
 - Git／GitHub 收尾已完成。
-- 尚未進入 Stage 1。
+
+**Stage 1 — Spring Boot 基礎 Skeleton 已完成**
+
+Stage 1 已完成：
+
+- Spring Boot Application 可正常啟動。
+- Embedded Tomcat 使用 port 8080。
+- 建立 `controller`、`service`、`repository`、`config` 基礎 package。
+- 建立 `HealthController` 與 `HealthService`。
+- 使用 Constructor Injection 由 Spring 注入 Service Bean。
+- 建立 `GET /api/health` Health Check Endpoint。
+- 建立 `SecurityConfig`，僅放行 `/api/health`，其他 Request 維持 authenticated。
+- Stage 1 暫時排除 DataSource Auto Configuration，正式 PostgreSQL 設定留待後續 Stage。
+- `mvnw test` lifecycle 成功，目前尚未建立正式 Test Case。
+- `mvnw package` 成功並產生可執行 Spring Boot JAR。
+
+Stage 1 尚未實作：
+
+- Business Entity
+- PostgreSQL Connection
+- Repository 實作
+- JPA Mapping
+- Flyway Migration
+- 正式 Authentication / JWT / RBAC
+- Business Rule
+- Automated Test Case
