@@ -1,55 +1,140 @@
 # Corporate Credit Management System
 
-## 專案目的
+## 1. Project Overview
 
-Corporate Credit Management System 是一個以 Java 與 Spring Boot 開發的作品集專案，模擬銀行內部企業授信流程中一個聚焦的範圍。本專案旨在展示 Business Rule 設計、Layered Architecture、Transaction 完整性、授權控管、可稽核性與自動化測試，但不試圖重現完整的銀行核心系統。
+Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend Portfolio Project，模擬銀行內部企業授信管理流程。專案聚焦於可說明的 Business Rules、Transaction 一致性、RBAC、Maker-Checker 與 Audit Trail；範圍刻意維持小而深，不試圖重現完整的 Core Banking System。
 
-## 規劃功能
+## 2. Core Workflow
 
-- 企業客戶管理
-- 授信申請草稿與送審
-- 具備 Maker-Checker 控制的審核核准或駁回
-- 核准授信額度管理
-- 具備 Transaction 一致性的 Drawdown 處理
-- RM、REVIEWER 與 ADMIN 的 RBAC
-- 業務 Audit Trail
-- Validation、Exception Handling、Filtering 與 Pagination
-- Unit Test、Integration Test、Security Test 與 Transaction Test
+`Company → CreditApplication → Submit → Review → Approve / Reject → CreditLimit → Drawdown`
 
-## 規劃 Tech Stack
+目前實作進度到 Company Backend 與 Company APIs，其餘流程依 Project Plan 分階段完成。
+
+## 3. Current Progress
+
+| Stage | Scope | Status |
+| --- | --- | --- |
+| Stage 0 | Project Setup | Completed |
+| Stage 1 | Spring Boot Skeleton | Completed |
+| Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed |
+| Stage 3 | CreditApplication／Submit | Next |
+
+Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+
+## 4. Implemented Features
+
+- 可正常啟動的 Spring Boot Application 與 Layered Architecture。
+- PostgreSQL DataSource Connection。
+- Company 的 JPA／Hibernate Entity Mapping，以及新增與查詢功能。
+- Flyway V1 Migration：`V1__create_company_table.sql`。
+- Company Entity、`CompanyRepository` 與 `CompanyService`。
+- `CreateCompanyRequest` DTO 與基本 Validation。
+- `CompanyController`。
+- `POST /api/companies`。
+- `GET /api/companies/{id}`。
+- `GET /api/companies`。
+- VS Code REST Client 人工 API 驗證。
+- PostgreSQL 實際寫入驗證。
+- Maven `test` 與 `package` Lifecycle `BUILD SUCCESS`。
+
+## 5. Architecture
+
+`Controller → Service → Repository → PostgreSQL`
+
+- API Request 使用 DTO。
+- Entity 作為 Persistence Model。
+- Response DTO 與 API Contract 隔離仍待後續完善。
+- Business Logic 原則上放在 Service。
+- Transaction Boundary 將於後續功能中放在 Service。
+
+## 6. Tech Stack
+
+### Backend
 
 - Java 21
-- Spring Boot 3.x 與 Maven
-- Spring Web、Spring Data JPA、Spring Security 與 Spring Validation
-- PostgreSQL、Hibernate 與 Flyway
-- JUnit 5、Mockito、Spring Boot Test，以及選配的 Testcontainers
-- 後期階段：Docker Compose 與 GitHub Actions
+- Spring Boot 3.5.x
+- Maven
 
-## 目前狀態
+### Web
 
-**Stage 2 — 已完成**
+- Spring Web
+- Spring Validation
 
-目前已完成 Spring Boot 基礎架構與第一個可連線 PostgreSQL 的 Company Backend：
+### Persistence
 
-- 已建立 `corporate_credit_management` Database，Spring Boot DataSource 可正常連線 PostgreSQL，並已移除 Stage 1 暫時使用的 DataSource Auto-Configuration 排除。
-- 已建立包含 `id`、`name`、`taxId` 與 `createdAt` 的 Company Entity，以及 Repository、Service、Create Request DTO 與 Controller。
-- Hibernate 負責 Entity Mapping、CRUD 與 Schema Validation；正式 Schema 由 Flyway 管理，並設定 `spring.jpa.hibernate.ddl-auto=validate`。
-- Flyway PostgreSQL Support 與 V1 Migration `V1__create_company_table.sql` 已完成，Database 已建立 `company` 與 `flyway_schema_history`。
-- Create Request 對 `name` 與固定 8 碼的 `taxId` 提供基本 Validation。
-- 已提供 `POST /api/companies`、`GET /api/companies/{id}` 與 `GET /api/companies`。
-- 已使用 VS Code REST Client 人工驗證 Company API，GET／POST 均成功回應，並確認資料實際寫入 PostgreSQL。
-- Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`；目前尚未建立正式 Automated Test Classes。
-- Health、Company API 與 `/error` 僅在開發期間暫時放行，CSRF 亦暫時關閉；正式 Authentication、JWT 與 RBAC 尚未完成。
+- PostgreSQL
+- Spring Data JPA
+- Hibernate
+- Flyway
 
-目前尚未完成：
+### Security
 
-- CreditApplication／CreditReview
-- CreditLimit／Drawdown
-- 正式 Authentication／JWT／RBAC
-- Business Rules
-- Exception Handling
-- Automated Tests
-- AuditLog
-- Swagger／OpenAPI
+- Spring Security Dependency
+- 正式 Authentication、JWT 與 RBAC 尚未完成
+
+### Testing
+
+- Spring Boot Test Dependency
+- Maven Lifecycle 驗證成功
+- 正式 Automated Tests 尚未建立
+
+### Later Stages
+
+- OpenAPI／Swagger
 - Docker
-- CI／GitHub Actions
+- GitHub Actions
+
+## 7. API
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/companies` | Create company |
+| `GET` | `/api/companies/{id}` | Get company by ID |
+| `GET` | `/api/companies` | Get all companies |
+
+## 8. Database & Migration
+
+- Database 使用 PostgreSQL。
+- Flyway 負責建立與修改正式 Schema。
+- Hibernate 使用 `spring.jpa.hibernate.ddl-auto=validate` 驗證 Schema。
+- V1 Migration 為 `V1__create_company_table.sql`。
+- V1 已建立 `company`，Migration 紀錄保存於 `flyway_schema_history`。
+
+## 9. Security Status
+
+目前僅為 Development Configuration：
+
+- Health、Company API 與 `/error` 暫時設為 `permitAll`。
+- CSRF 暫時關閉。
+- 正式 Authentication、JWT 與 RBAC 尚未完成。
+
+## 10. Testing Status
+
+已完成：
+
+- VS Code REST Client 人工 API 驗證。
+- PostgreSQL Persistence 寫入驗證。
+- Maven `test` Lifecycle 驗證。
+- Maven `package` Lifecycle 驗證。
+
+尚未完成：
+
+- Unit Tests
+- Integration Tests
+- Security Tests
+- Transaction Tests
+
+## 11. Roadmap
+
+- CreditApplication／Submit
+- CreditReview／Approve／Reject
+- CreditLimit
+- Security／JWT／RBAC／Maker-Checker
+- Drawdown／Transaction
+- Audit／Exception Handling
+- Automated Tests／CI
+- Docker／Final Documentation
+
+## 12. Project Documents
+
+完整 Scope、Domain Model、Business Rules、Architecture Rules、Testing Strategy 與 Stage Plan 請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。

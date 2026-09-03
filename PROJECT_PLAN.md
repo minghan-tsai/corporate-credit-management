@@ -1,16 +1,17 @@
-# Corporate Credit Management System — 專案計畫
+# Corporate Credit Management System — Project Plan
 
-## 專案概述
+## 1. Project Positioning
 
-Corporate Credit Management System 是一個以作品集為導向的 Java／Spring Boot Backend，刻意以「小而深」的範圍模擬銀行內部企業授信系統。專案聚焦於企業客戶建檔、授信申請、獨立審核、建立核准額度，以及 Drawdown 的完整生命週期。本專案並非完整的銀行核心系統平台。
+Corporate Credit Management System 是一個以作品集為導向的 Java／Spring Boot Backend，刻意以「小而深」的範圍模擬銀行內部企業授信系統。專案聚焦於企業客戶建檔、授信申請、獨立審核、建立核准額度，以及 Drawdown 的完整生命週期。本專案並非完整的 Core Banking System。
 
 - Artifact／資料夾：`corporate-credit-management`
 - Base package：`com.minghan.credit`
 - Packaging：可執行 JAR
 - 目標完成日：2026-09-10
 - 交付原則：**小而深**
+- 目標職缺：金融 IT，以及銀行法金／授信 Backend
 
-## 目標
+專案目標：
 
 - 展示實務 Java 21 與 Spring Boot Backend Engineering 能力。
 - 建模有意義的企業授信 Business Rules，而非只有 CRUD。
@@ -20,36 +21,46 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - 依規劃 Stage 實作 Authentication、Authorization、RBAC 與 Maker-Checker 控制。
 - 維護獨立的業務 Audit Trail。
 - 透過適度的自動化與人工測試驗證核心規則。
-- 僅在核心系統穩固後，加入可重現的 Packaging 與 CI。
-
-## 目標職缺／技術定位
-
-本專案以金融 IT，以及銀行法金／授信 Backend 職缺為目標。專案設計用於展示 Java、Spring Boot、REST、SQL／PostgreSQL、JPA／Hibernate、Transaction、Authentication／Authorization、RBAC、Maker-Checker／Segregation of Duties、Validation、Exception Handling、Audit Trail、自動化測試、Docker 與 CI/CD。
+- 僅在核心系統穩固後加入可重現的 Packaging 與 CI。
 
 優先順序為可說明的 Business Logic、資料一致性、Security Boundary 與測試。Public Deployment 為選配，不得排擠上述優先事項。
 
-## 業務 Domain
+## 2. Scope
 
-### 核心業務 Domain
+### In Scope
 
-1. **Company** — 企業客戶。
-2. **CreditApplication** — 企業授信申請。
-3. **CreditReview** — 核准或駁回的審核紀錄。
-4. **CreditLimit** — 已核准的授信額度。
-5. **Drawdown** — 已核准額度的動用。
+- **Company** — 企業客戶。
+- **CreditApplication** — 企業授信申請。
+- **CreditReview** — 核准或駁回的審核紀錄。
+- **CreditLimit** — 已核准的授信額度。
+- **Drawdown** — 已核准額度的動用。
+- **User** — 銀行內部系統使用者。
+- **Role** — RM、REVIEWER、ADMIN 等系統角色。
+- **AuditLog** — 業務操作 Audit 紀錄。
 
-### 系統控制 Domain
+目前僅 Company 已完成實作，其餘項目仍屬後續 Stage。
 
-6. **User** — 銀行內部系統使用者。
-7. **Role** — 系統角色，目前規劃包含 RM、REVIEWER、ADMIN。
+### Out of Scope
 
-### 橫向 Domain
+V1 不包含：
 
-8. **AuditLog** — 業務操作 Audit 紀錄。
+- 真實信用評分
+- 財務報表分析
+- 擔保品估值
+- 聯徵整合
+- Basel 計算
+- IFRS 9
+- 完整還款或利息模型
+- 逾期管理
+- 真實金流
+- 複雜多階段簽核
+- Redis
+- Kafka
+- Kubernetes
+- Elasticsearch
+- Microservices
 
-這些 Domain 在 Stage 0 僅為規劃；本 Stage 不包含任何 Domain 實作。
-
-## 角色
+## 3. Roles
 
 ### RM
 
@@ -74,7 +85,7 @@ RM 不得 Approve 或 Reject 授信申請。
 
 Maker-Checker 是一條獨立的 Business Rule，而不只是 RM 與 REVIEWER 被賦予不同 Endpoint 權限後的自然結果。即使 User 的 Role 允許執行 Review，Service 層在允許 Approve 或 Reject 前，仍必須驗證 reviewer 與 `CreditApplication.createdBy` 不是同一位 User。只依賴 Endpoint Authorization 並不足以落實 Segregation of Duties。
 
-User 與 Role 要採用單一 Role 或多 Role 關係，仍是留待 Security／RBAC Stage 決定的明確設計議題。Stage 0 不決定或實作此關係，而 Maker-Checker 規則在任一模型下都必須成立。
+User 與 Role 要採用單一 Role 或多 Role 關係，仍是留待 Security／RBAC Stage 決定的明確設計議題。Maker-Checker 規則在任一模型下都必須成立。
 
 ### ADMIN
 
@@ -85,7 +96,36 @@ User 與 Role 要採用單一 Role 或多 Role 關係，仍是留待 Security／
 
 ADMIN 不是金融業務的 super user，不應自動取得不受限制的申請、審核、額度或 Drawdown 操作權限。
 
-## 核心流程
+## 4. Domain Model
+
+### Domain
+
+1. **Company** — 企業客戶。
+2. **CreditApplication** — 企業授信申請。
+3. **CreditReview** — 核准或駁回的審核紀錄。
+4. **CreditLimit** — 已核准的授信額度。
+5. **Drawdown** — 已核准額度的動用。
+6. **User** — 銀行內部系統使用者。
+7. **Role** — 系統角色。
+8. **AuditLog** — 業務操作 Audit 紀錄。
+
+### Relationships
+
+- Company `1:N` CreditApplication
+- CreditApplication `1:N` CreditReview
+- CreditApplication `1:0..1` CreditLimit
+- CreditLimit `1:N` Drawdown
+
+規劃中的 User 參照：
+
+- `CreditApplication.createdBy`
+- `CreditReview.reviewedBy`
+- `Drawdown.createdBy`
+- `AuditLog.user`
+
+精確的 ownership、fetch、cascade、identifier、indexing、locking 與金額欄位設計，將在排定的 Stage 中進行決策與 Review，不預先假設。
+
+## 5. Core Workflow
 
 `Company → CreditApplication → Submit → Review → Approve / Reject → CreditLimit → Drawdown`
 
@@ -103,7 +143,7 @@ V1 合法狀態轉換：
 
 V1 刻意排除複雜的多階段簽核。
 
-## Business Rules
+## 6. Business Rules
 
 ### CreditApplication
 
@@ -154,7 +194,7 @@ Reject 操作必須在同一個一致的 Transaction Boundary 中執行以下所
 - 成功執行 Drawdown 時，必須以 atomic 方式更新 CreditLimit、建立 Drawdown，並建立 AuditLog。
 - 任何步驟失敗時，整個操作都必須 rollback。
 
-## Audit 規劃
+## 7. Audit Strategy
 
 V1 規劃的 Audit Actions：
 
@@ -175,55 +215,15 @@ AuditLog 至少包含：
 
 Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在何時對哪個 Target 執行相關操作的持久性業務紀錄。兩者是不同概念，不得視為可互換的資訊。
 
-## Data Model
-
-規劃關係：
-
-- Company `1:N` CreditApplication
-- CreditApplication `1:N` CreditReview
-- CreditApplication `1:0..1` CreditLimit
-- CreditLimit `1:N` Drawdown
-
-規劃中的 User 參照：
-
-- `CreditApplication.createdBy`
-- `CreditReview.reviewedBy`
-- `Drawdown.createdBy`
-- `AuditLog.user`
-
-精確的 ownership、fetch、cascade、identifier、indexing、locking 與金額欄位設計，將在排定的 Stage 中進行決策與 Review，不在 Stage 0 預先假設。
-
-## 規劃 API
-
-以下是規劃層級的 API Map，並非 Stage 0 實作或最終 API Contract：
-
-| 功能 | 規劃 method／path | 主要 Role |
-| --- | --- | --- |
-| 建立 Company | `POST /api/companies` | RM |
-| 查詢 Company | `GET /api/companies` | 已授權的內部 User |
-| 建立 CreditApplication | `POST /api/credit-applications` | RM |
-| 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM |
-| Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM |
-| 查詢授信申請 | `GET /api/credit-applications` | RM, REVIEWER |
-| Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER |
-| Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER |
-| 查看 CreditReview | `GET /api/credit-applications/{id}/reviews` | REVIEWER |
-| 查看 CreditLimit | `GET /api/credit-applications/{id}/credit-limit` | REVIEWER 與已授權的業務 User |
-| 建立 Drawdown | `POST /api/credit-limits/{id}/drawdowns` | RM |
-| 管理 User／Role | `/api/admin/users`, `/api/admin/roles` | ADMIN |
-| 查詢 AuditLog | `GET /api/admin/audit-logs` | ADMIN |
-
-Request／Response DTO、Response Code、Filtering、Pagination、Idempotency、Concurrency Control 與 Error Contract，將在各功能設計時定義。Stage 0 不存在任何 Controller。
-
-## Architecture
+## 8. Architecture
 
 規劃採用 Layered Architecture：
 
 `Controller → Service → Repository → PostgreSQL`
 
-並搭配 DTO、Entity、Validation、Exception 與 Security 等關注面向。
+並搭配 DTO、Entity、Validation、Exception 與 Security 等關注面向。V1 維持 Modular Monolith；Microservices 不在範圍內。
 
-Coding Rules：
+### Coding Rules
 
 1. Controller 不得包含核心 Business Logic。
 2. Controller 不得直接呼叫 Repository。
@@ -234,65 +234,98 @@ Coding Rules：
 7. 避免範圍過大或無意義的 try/catch。
 8. 不得加入無法清楚說明用途的 Framework。
 
-V1 維持 Modular Monolith；Microservices 不在範圍內。
-
-## Tech Stack
-
-### Stage 0 已初始化
+### Technology Baseline
 
 - Java 21
 - Maven
 - Spring Boot 3.5.16，可執行 JAR
 - Spring Web
 - Spring Data JPA
-- 僅加入 Spring Security dependency；未實作 Security
+- Spring Security Dependency
 - Spring Validation
 - PostgreSQL JDBC Driver
-- Flyway Core 與 Flyway PostgreSQL support
-- 僅加入 Spring Boot Test dependency；未建立正式 Test Case
+- Flyway Core 與 Flyway PostgreSQL Support
+- Spring Boot Test Dependency
 
-### 後續 Stage 規劃
+後續規劃使用 JWT Authentication、OpenAPI／Swagger、JUnit 5、Mockito、Docker Compose 與 GitHub Actions。Testcontainers 為高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
 
-- JWT Authentication
-- OpenAPI／Swagger
-- JUnit 5 與 Mockito
-- Testcontainers，列為高優先選配加分項
-- 透過 Spring Boot 預設使用 SLF4J 與 Logback
-- Docker Compose
-- GitHub Actions
-- Spring Batch 或 Scheduling，僅在後續有合理用途且時程允許時採用
+Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
-Lombok 不是 Stage 0 dependency，且不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
+### API Map
 
-## Database Strategy
+目前僅 Company APIs 已實作，其餘為規劃層級，並非目前已完成的 API Contract。
 
-- Database：PostgreSQL
-- ORM：Spring Data JPA、Jakarta Persistence／JPA 與 Hibernate
-- Schema Migration：Flyway
+| 功能 | Method／Path | 主要 Role | 狀態 |
+| --- | --- | --- | --- |
+| 建立 Company | `POST /api/companies` | RM | 已實作；正式 RBAC 未完成 |
+| 查詢 Company | `GET /api/companies`, `GET /api/companies/{id}` | 已授權的內部 User | 已實作；正式 RBAC 未完成 |
+| 建立 CreditApplication | `POST /api/credit-applications` | RM | 規劃 |
+| 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM | 規劃 |
+| Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 規劃 |
+| 查詢授信申請 | `GET /api/credit-applications` | RM, REVIEWER | 規劃 |
+| Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 規劃 |
+| Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 規劃 |
+| 查看 CreditReview | `GET /api/credit-applications/{id}/reviews` | REVIEWER | 規劃 |
+| 查看 CreditLimit | `GET /api/credit-applications/{id}/credit-limit` | REVIEWER 與已授權的業務 User | 規劃 |
+| 建立 Drawdown | `POST /api/credit-limits/{id}/drawdowns` | RM | 規劃 |
+| 管理 User／Role | `/api/admin/users`, `/api/admin/roles` | ADMIN | 規劃 |
+| 查詢 AuditLog | `GET /api/admin/audit-logs` | ADMIN | 規劃 |
+
+Company Create Request DTO 與基本 Validation 已完成。通用 Response DTO、Response Code、Filtering、Pagination、Idempotency、Concurrency Control 與 Error Contract，仍將在各功能設計時定義。
+
+## 9. Database Strategy
+
+目前已完成：
+
+- PostgreSQL Database 與 Spring Boot DataSource Connection。
+- Spring Data JPA、Jakarta Persistence／JPA 與 Hibernate Entity Mapping。
+- Flyway Core 與 Flyway PostgreSQL Support。
+- `V1__create_company_table.sql` Migration。
+- `company` 與 `flyway_schema_history`。
+- `spring.jpa.hibernate.ddl-auto=validate`。
 
 原則：
 
 - Flyway 負責建立與修改 Database Schema。
-- Hibernate 負責 Object-Relational Mapping，並驗證 Schema。
-- Schema 與環境設定完成後，正式設定預計使用 `spring.jpa.hibernate.ddl-auto=validate`。
+- Hibernate 負責 Object-Relational Mapping、Persistence Operations 與 Schema Validation。
+- 正式 Schema 不由 Hibernate 自動建立。
 - `ddl-auto=update` 不得作為正式的 Schema Management Strategy。
-- Stage 0 不建立任何業務 Schema 或正式 Migration。
 - Database Connection Details 必須外部化，Secret 不得 commit。
 
-由於 Stage 0 Skeleton 刻意不包含 PostgreSQL Connection Configuration 或 Migration，使用 JPA／Flyway Auto-Configuration 正常啟動 Application 時，將需要後續環境設定。Build 與 Compilation 必須能獨立驗證。
+## 10. Security Strategy
 
-## Testing Strategy
+### Planned
 
-Stage 0 不建立正式 Test Case。
+- Authentication
+- JWT
+- RBAC
+- RM、REVIEWER、ADMIN 權限邊界
+- Maker-Checker／Segregation of Duties
+
+### Current
+
+- 僅有 Development `SecurityConfig`，不是正式 Security 機制。
+- Health、Company API 與 `/error` 暫時設為 `permitAll`。
+- CSRF 暫時關閉。
+- 正式 Authentication、JWT 與 RBAC 尚未完成。
+
+## 11. Testing Strategy
+
+### Current Status
+
+- 尚未建立正式 Automated Test Classes。
+- Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`。
+- VS Code REST Client 人工 Company API 驗證已完成。
+- PostgreSQL Persistence 寫入驗證已完成。
 
 ### Unit Test
 
-- JUnit 5 與 Mockito。
+- 使用 JUnit 5 與 Mockito。
 - 主要聚焦於 Service Business Rules 與 State Transition。
 
 ### Integration Test
 
-- Spring Boot Test。
+- 使用 Spring Boot Test。
 - 涵蓋核心 API、Repository 與 Database Flow。
 
 ### Security Test
@@ -322,9 +355,7 @@ Drawdown 失敗時，驗證以下所有項目：
 
 Testcontainers 是高優先加分項，但若時程壓力需要可省略。本專案不追求 100% Coverage；目標是充分涵蓋具風險的規則與 Boundary。
 
-## Docker／CI Strategy
-
-Stage 0 不實作 Docker 或 CI。
+## 12. Delivery／Docker／CI
 
 - 前期開發：Local Java 加 Local PostgreSQL。
 - 後期 Packaging：以 Docker Compose 執行 Spring Boot 與 PostgreSQL。
@@ -334,50 +365,51 @@ Stage 0 不實作 Docker 或 CI。
 
 Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 或 Testing。
 
-## AI／Codex 協作規則
+## 13. Development Stages
 
-Codex 不得代替使用者完整撰寫核心實作。
+| Stage | Scope | Status | Actual Completion |
+| --- | --- | --- | --- |
+| Stage 0 | Project Planning／Initialization | Completed | 2026-08-22 |
+| Stage 1 | Spring Boot Skeleton | Completed | 2026-08-25 |
+| Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed | 2026-09-03 |
+| Stage 3 | CreditApplication／Submit | Next | - |
+| Stage 4 | CreditReview／Approve／Reject／CreditLimit | Planned | - |
+| Stage 5 | Security／JWT／RBAC／Maker-Checker | Planned | - |
+| Stage 6 | Drawdown／Transaction | Planned | - |
+| Stage 7 | Audit／Exception／Filtering／Pagination | Planned | - |
+| Stage 8 | Automated Tests／CI | Planned | - |
+| Stage 9 | Docker／Documentation／Final Verification | Planned | - |
 
-- 使用者負責理解與實作核心 Business Logic。
-- 第一次接觸核心技術時，由使用者先學習並撰寫第一版。
-- Codex 主要協助 Review、Boilerplate、重複工作、Automation、Documentation 與 Git 操作。
-- 未經明確同意，Codex 不得導入大型 Framework 或改變 Architecture。
-- 修改核心 Code 前，Codex 必須說明修改目的。
-- 修改後，Codex 必須列出變更檔案與每項變更原因。
-- 使用者必須 Review 所有核心 Diff。
+### Original Schedule
 
-以下功能第一次實作時，Codex 不得從零建立完整功能：
+原始規劃日期皆為 2026 年，時區為 Asia/Taipei；每個開發日預計投入約 5～6 小時，目標完成日維持 2026-09-10。
 
-- JPA Relationship
-- Transaction
-- Spring Security
-- Business Rules
-- Exception Handling
-- Integration Test
-
-即使 Code Generation 速度較快，這些規則仍要求 Assistant 在適當的學習／Review Boundary 暫停。
-
-## Stage Plan
-
-假設日期皆為 2026 年，時區為 Asia/Taipei。每個開發日預計投入約 5～6 小時。最終截止日為 2026-09-10。
-
-| Stage | 日期 | 規劃成果 |
-| --- | --- | --- |
-| Stage 0 | 8/21–8/22 | 規劃、環境、文件與最小化專案初始化 |
-| Stage 1 | 8/23–8/25 | Spring Boot 基礎 Skeleton |
-| Stage 2（已完成） | 8/26 | PostgreSQL、JPA／Hibernate、Flyway、Company API |
-| Stage 3 | 8/27 | CreditApplication 與 Submit |
-| Stage 4 | 8/28–8/29 | CreditReview、Approve／Reject、CreditLimit |
-| Stage 5 | 8/30–8/31 | Spring Security、JWT、RBAC、Maker-Checker |
-| 不安排電腦開發 | 9/1–9/2 | 不安排任何 Implementation 工作 |
-| Stage 6 | 9/3–9/4 | Drawdown 與 Transaction Behavior |
-| Stage 7 | 9/5 | Audit、Exception Handling、Filtering、Pagination |
-| Stage 8 | 9/6–9/7 | Unit Test、Integration Test、Security Test 與 CI |
-| Stage 9 | 9/8–9/10 | Docker、Documentation、Final Verification、Release |
+- Stage 0：8/21–8/22
+- Stage 1：8/23–8/25
+- Stage 2：原訂 8/26，實際完成日為 9/3
+- Stage 3：原訂 8/27
+- Stage 4：原訂 8/28–8/29
+- Stage 5：原訂 8/30–8/31
+- 9/1–9/2：不安排電腦開發
+- Stage 6：原訂 9/3–9/4
+- Stage 7：原訂 9/5
+- Stage 8：原訂 9/6–9/7
+- Stage 9：原訂 9/8–9/10
 
 2026-09-08 後不得新增大型功能。
 
-## Definition of Done
+## 14. Current Status
+
+**Stage 2 Completed**
+
+- PostgreSQL DataSource、JPA／Hibernate 與 Flyway V1 已完成。
+- Company Entity、Repository、Service、Request DTO、Validation、Controller 與三個 API 已完成。
+- REST Client 與 PostgreSQL 寫入人工驗證已完成。
+- Maven `test`／`package` Lifecycle 均為 `BUILD SUCCESS`，但尚無正式 Automated Test Classes。
+- Stage 2 已於 2026-09-03 推送至 GitHub，Tag 為 `v1-stage-2`。
+- Stage 3 尚未開始。
+
+## 15. Definition of Done
 
 每個 Stage 至少必須確認：
 
@@ -403,83 +435,25 @@ Codex 不得代替使用者完整撰寫核心實作。
 
 Stage Tags 為 `v1-stage-0` 至 `v1-stage-9`。最終 Release Tag 為 `v1.0.0`。
 
-## Scope Exclusions
+## 16. AI／Codex Collaboration Rules
 
-V1 不包含：
+Codex 不得代替使用者完整撰寫核心實作。
 
-- 真實信用評分
-- 財務報表分析
-- 擔保品估值
-- 聯徵整合
-- Basel 計算
-- IFRS 9
-- 完整還款或利息模型
-- 逾期管理
-- 真實金流
-- 複雜多階段簽核
-- Redis
-- Kafka
-- Kubernetes
-- Elasticsearch
-- Microservices
+- 使用者負責理解與實作核心 Business Logic。
+- 第一次接觸核心技術時，由使用者先學習並撰寫第一版。
+- Codex 主要協助 Review、Boilerplate、重複工作、Automation、Documentation 與 Git 操作。
+- 未經明確同意，Codex 不得導入大型 Framework 或改變 Architecture。
+- 修改核心 Code 前，Codex 必須說明修改目的。
+- 修改後，Codex 必須列出變更檔案與每項變更原因。
+- 使用者必須 Review 所有核心 Diff。
 
-Stage 0 也排除所有正式 Business Entity、Controller、Service、Repository、Query、Business Logic、Security／JWT／RBAC 實作、Transaction、正式 Test、Migration、Docker、CI、Batch Processing 與 Messaging。
+以下功能第一次實作時，Codex 不得從零建立完整功能：
 
-## 目前狀態
+- JPA Relationship
+- Transaction
+- Spring Security
+- Business Rules
+- Exception Handling
+- Integration Test
 
-**Stage 0 — 專案規劃與初始化**
-
-Stage 0 僅包含：
-
-- 最小化的 Java 21／Maven／Spring Boot 3.x Application Entry Point。
-- 已核准之未來 Tech Stack 所需的 Build Dependencies。
-- 最小化 Application Naming Configuration。
-- 專案規劃與簡介文件。
-- Repository Ignore Rules。
-
-Stage 0 已完成，狀態如下：
-
-- 已通過人工 Review。
-- `mvnw test` 與 `mvnw package` 驗證成功。
-- Git／GitHub 收尾已完成。
-
-**Stage 1 — Spring Boot 基礎 Skeleton 已完成**
-
-Stage 1 已完成：
-
-- Spring Boot Application 可正常啟動。
-- Embedded Tomcat 使用 port 8080。
-- 建立 `controller`、`service`、`repository`、`config` 基礎 package。
-- 建立 `HealthController` 與 `HealthService`。
-- 使用 Constructor Injection 由 Spring 注入 Service Bean。
-- 建立 `GET /api/health` Health Check Endpoint。
-- 建立 `SecurityConfig`，僅放行 `/api/health`，其他 Request 維持 authenticated。
-- Stage 1 暫時排除 DataSource Auto Configuration，正式 PostgreSQL 設定留待後續 Stage。
-- `mvnw test` lifecycle 成功，目前尚未建立正式 Test Case。
-- `mvnw package` 成功並產生可執行 Spring Boot JAR。
-
-Stage 1 尚未實作：
-
-- Business Entity
-- PostgreSQL Connection
-- Repository 實作
-- JPA Mapping
-- Flyway Migration
-- 正式 Authentication / JWT / RBAC
-- Business Rule
-- Automated Test Case
-
-**Stage 2 — PostgreSQL、JPA／Hibernate、Flyway 與 Company 已完成**
-
-Stage 2 已完成：
-
-- 已建立 `corporate_credit_management` PostgreSQL Database，並完成 Spring Boot DataSource 連線設定；Stage 1 暫時使用的 DataSource Auto-Configuration 排除已移除。
-- 已建立 Company Entity，欄位包含 `id`、`name`、`taxId` 與 `createdAt`。
-- 已完成 JPA／Hibernate Entity Mapping、CRUD 與 Schema Validation；正式 Schema 不由 Hibernate 自動建立。
-- 已設定 `spring.jpa.hibernate.ddl-auto=validate`。
-- 已加入 Flyway PostgreSQL Support；V1 Migration `V1__create_company_table.sql` 已成功執行，建立 `company` 與 `flyway_schema_history`。
-- 已建立 `CompanyRepository`、`CompanyService`、`CreateCompanyRequest` DTO、基本 Validation 與 `CompanyController`。
-- 已提供 `POST /api/companies`、`GET /api/companies/{id}` 與 `GET /api/companies`。
-- 已使用 VS Code REST Client 完成人工 API 驗證，並於 PostgreSQL 確認新增資料實際寫入。
-- Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`；目前尚未建立正式 Automated Test Classes。
-- Health、Company API 與 `/error` 的放行及 CSRF 關閉均為開發期間暫時設定；正式 Authentication、JWT 與 RBAC 尚未完成。
+即使 Code Generation 速度較快，這些規則仍要求 Assistant 在適當的學習／Review Boundary 暫停。
