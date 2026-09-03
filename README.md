@@ -27,26 +27,29 @@ Corporate Credit Management System 是一個以 Java 與 Spring Boot 開發的�
 
 ## 目前狀態
 
-**Stage 1 — 已完成**
+**Stage 2 — 已完成**
 
-Stage 1 已完成 Spring Boot 基礎 Skeleton：
+目前已完成 Spring Boot 基礎架構與第一個可連線 PostgreSQL 的 Company Backend：
 
-- Spring Boot 可正常啟動。
-- Embedded Tomcat 使用 port 8080。
-- 建立 `controller`、`service`、`repository`、`config` 基礎分層。
-- 建立 `HealthController` 與 `HealthService`。
-- 使用 Constructor Injection。
-- 建立 `GET /api/health`。
-- 建立 `SecurityConfig`：`/api/health` 設為 `permitAll`，其餘 Request 要求 `authenticated`。此項僅為基礎存取規則，尚未完成正式 Authentication、JWT 或 RBAC。
-- `mvnw test` lifecycle 成功，但目前尚無正式 automated test。
-- `mvnw package` 成功並產生可執行 JAR。
+- 已建立 `corporate_credit_management` Database，Spring Boot DataSource 可正常連線 PostgreSQL，並已移除 Stage 1 暫時使用的 DataSource Auto-Configuration 排除。
+- 已建立包含 `id`、`name`、`taxId` 與 `createdAt` 的 Company Entity，以及 Repository、Service、Create Request DTO 與 Controller。
+- Hibernate 負責 Entity Mapping、CRUD 與 Schema Validation；正式 Schema 由 Flyway 管理，並設定 `spring.jpa.hibernate.ddl-auto=validate`。
+- Flyway PostgreSQL Support 與 V1 Migration `V1__create_company_table.sql` 已完成，Database 已建立 `company` 與 `flyway_schema_history`。
+- Create Request 對 `name` 與固定 8 碼的 `taxId` 提供基本 Validation。
+- 已提供 `POST /api/companies`、`GET /api/companies/{id}` 與 `GET /api/companies`。
+- 已使用 VS Code REST Client 人工驗證 Company API，GET／POST 均成功回應，並確認資料實際寫入 PostgreSQL。
+- Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`；目前尚未建立正式 Automated Test Classes。
+- Health、Company API 與 `/error` 僅在開發期間暫時放行，CSRF 亦暫時關閉；正式 Authentication、JWT 與 RBAC 尚未完成。
 
 目前尚未完成：
 
-- PostgreSQL Connection
-- JPA／Entity／Repository 實作
-- Flyway Migration
+- CreditApplication／CreditReview
+- CreditLimit／Drawdown
 - 正式 Authentication／JWT／RBAC
 - Business Rules
-- Automated Test Case
-- Docker／CI
+- Exception Handling
+- Automated Tests
+- AuditLog
+- Swagger／OpenAPI
+- Docker
+- CI／GitHub Actions

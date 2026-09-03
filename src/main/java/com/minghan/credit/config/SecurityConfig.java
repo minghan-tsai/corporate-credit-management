@@ -9,13 +9,15 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // Stage 1 暫時放行健康檢查端點，其餘 Request 仍需驗證
+        // Stage 2 開發期間暫時放行 Health 與 Company API，正式驗證與權限控管留待後續 Stage
         http
+                .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/health").permitAll()
+                        .requestMatchers("/api/companies", "/api/companies/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated());
 
         return http.build();
     }
-
 }

@@ -1,0 +1,16 @@
+
+### 查詢所有公司
+GET http://localhost:8080/api/companies
+
+### 查單筆公司
+GET http://localhost:8080/api/companies/12
+
+
+### 新增公司
+POST http://localhost:8080/api/companies
+Content-Type: application/json
+
+{
+  "name": "第七測試企業股份有限公司",
+  "taxId": "32085241"
+}

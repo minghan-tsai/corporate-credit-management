@@ -227,7 +227,7 @@ Coding Rules：
 
 1. Controller 不得包含核心 Business Logic。
 2. Controller 不得直接呼叫 Repository。
-3. API Request 與 Response 不得直接暴露 Entity。
+3. API Request 使用 DTO；Response DTO 與 API Contract 隔離仍是後續要完善的設計原則。
 4. Transaction Boundary 主要放在 Service。
 5. 核心 Business Rules 必須有 Test。
 6. Password、JWT 與 Secret 絕對不得寫入 Log。
@@ -365,7 +365,7 @@ Codex 不得代替使用者完整撰寫核心實作。
 | --- | --- | --- |
 | Stage 0 | 8/21–8/22 | 規劃、環境、文件與最小化專案初始化 |
 | Stage 1 | 8/23–8/25 | Spring Boot 基礎 Skeleton |
-| Stage 2 | 8/26 | PostgreSQL、JPA、Flyway、Company |
+| Stage 2（已完成） | 8/26 | PostgreSQL、JPA／Hibernate、Flyway、Company API |
 | Stage 3 | 8/27 | CreditApplication 與 Submit |
 | Stage 4 | 8/28–8/29 | CreditReview、Approve／Reject、CreditLimit |
 | Stage 5 | 8/30–8/31 | Spring Security、JWT、RBAC、Maker-Checker |
@@ -468,3 +468,18 @@ Stage 1 尚未實作：
 - 正式 Authentication / JWT / RBAC
 - Business Rule
 - Automated Test Case
+
+**Stage 2 — PostgreSQL、JPA／Hibernate、Flyway 與 Company 已完成**
+
+Stage 2 已完成：
+
+- 已建立 `corporate_credit_management` PostgreSQL Database，並完成 Spring Boot DataSource 連線設定；Stage 1 暫時使用的 DataSource Auto-Configuration 排除已移除。
+- 已建立 Company Entity，欄位包含 `id`、`name`、`taxId` 與 `createdAt`。
+- 已完成 JPA／Hibernate Entity Mapping、CRUD 與 Schema Validation；正式 Schema 不由 Hibernate 自動建立。
+- 已設定 `spring.jpa.hibernate.ddl-auto=validate`。
+- 已加入 Flyway PostgreSQL Support；V1 Migration `V1__create_company_table.sql` 已成功執行，建立 `company` 與 `flyway_schema_history`。
+- 已建立 `CompanyRepository`、`CompanyService`、`CreateCompanyRequest` DTO、基本 Validation 與 `CompanyController`。
+- 已提供 `POST /api/companies`、`GET /api/companies/{id}` 與 `GET /api/companies`。
+- 已使用 VS Code REST Client 完成人工 API 驗證，並於 PostgreSQL 確認新增資料實際寫入。
+- Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`；目前尚未建立正式 Automated Test Classes。
+- Health、Company API 與 `/error` 的放行及 CSRF 關閉均為開發期間暫時設定；正式 Authentication、JWT 與 RBAC 尚未完成。
