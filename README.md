@@ -20,7 +20,7 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 | Stage 3 | CreditApplication／Submit | Completed |
 | Stage 4 | CreditReview／Approve／Reject／CreditLimit | Next |
 
-Stage 3 已於 2026-09-04 完成，目前尚未 commit、push 或建立 Stage 3 Tag。Stage 2 已推送至 GitHub，Tag 為 `v1-stage-2`。後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+Stage 3 已於 2026-09-04 完成，commit 為 `feat: complete stage 3 credit application submit flow`，已推送至 `origin/main`；Tag `v1-stage-3` 亦已建立並推送至 origin。後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
 
 ## 4. Implemented Features
 

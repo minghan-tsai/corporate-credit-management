@@ -418,7 +418,7 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 - REST Client 與 PostgreSQL 人工驗證已確認建立、資料寫入及 `DRAFT → SUBMITTED`。
 - 重複 Submit 已由 Business Rule 阻擋；Exception Handling 尚未完成，目前回傳 500。
 - Maven `test`／`package` Lifecycle 均為 `BUILD SUCCESS`，但尚無正式 Automated Test Classes。
-- Stage 3 完成日為 2026-09-04，目前尚未 commit、push 或建立 `v1-stage-3` Tag。
+- Stage 3 完成日為 2026-09-04；commit 為 `feat: complete stage 3 credit application submit flow`，已推送至 `origin/main`，Tag `v1-stage-3` 亦已建立並推送至 origin。
 - 下一階段為 Stage 4：CreditReview／Approve／Reject／CreditLimit。
 
 ## 15. Definition of Done
