@@ -15,6 +15,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/companies", "/api/companies/**").permitAll()
+                        // Stage 3 開發期間暫時放行授信申請 API。
+                        // 正式 Security / RBAC 完成後會改為依角色限制存取。
+                        .requestMatchers("/api/credit-applications", "/api/credit-applications/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated());
 

@@ -8,7 +8,7 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 
 `Company → CreditApplication → Submit → Review → Approve / Reject → CreditLimit → Drawdown`
 
-目前實作進度到 Company Backend 與 Company APIs，其餘流程依 Project Plan 分階段完成。
+目前已完成 Company Backend／APIs，以及 CreditApplication 建立與 Submit 流程；下一階段將實作 CreditReview、Approve／Reject 與 CreditLimit。
 
 ## 3. Current Progress
 
@@ -17,9 +17,10 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 | Stage 0 | Project Setup | Completed |
 | Stage 1 | Spring Boot Skeleton | Completed |
 | Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed |
-| Stage 3 | CreditApplication／Submit | Next |
+| Stage 3 | CreditApplication／Submit | Completed |
+| Stage 4 | CreditReview／Approve／Reject／CreditLimit | Next |
 
-Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+Stage 3 已於 2026-09-04 完成，目前尚未 commit、push 或建立 Stage 3 Tag。Stage 2 已推送至 GitHub，Tag 為 `v1-stage-2`。後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
 
 ## 4. Implemented Features
 
@@ -30,9 +31,17 @@ Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後
 - Company Entity、`CompanyRepository` 與 `CompanyService`。
 - `CreateCompanyRequest` DTO 與基本 Validation。
 - `CompanyController`。
+- CreditApplication Entity、Status Enum、Repository、Service 與 Controller。
+- Company `1:N` CreditApplication；CreditApplication 端使用 LAZY `@ManyToOne`。
+- `requestedAmount` 使用 `BigDecimal`，新申請初始狀態固定為 `DRAFT`。
+- `CreateCreditApplicationRequest` 與 `CreditApplicationResponse` DTO；Response DTO 避免直接序列化 Hibernate LAZY Proxy。
+- 只有 `DRAFT` 申請可以 Submit 為 `SUBMITTED`。
 - `POST /api/companies`。
 - `GET /api/companies/{id}`。
 - `GET /api/companies`。
+- `POST /api/credit-applications`。
+- `POST /api/credit-applications/{id}/submit`。
+- Flyway V2 Migration：`V2__create_credit_applications_table.sql`。
 - VS Code REST Client 人工 API 驗證。
 - PostgreSQL 實際寫入驗證。
 - Maven `test` 與 `package` Lifecycle `BUILD SUCCESS`。
@@ -43,7 +52,7 @@ Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後
 
 - API Request 使用 DTO。
 - Entity 作為 Persistence Model。
-- Response DTO 與 API Contract 隔離仍待後續完善。
+- CreditApplication API 使用 Response DTO 與 Persistence Model 隔離。
 - Business Logic 原則上放在 Service。
 - Transaction Boundary 將於後續功能中放在 Service。
 
@@ -86,11 +95,13 @@ Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後
 
 ## 7. API
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `POST` | `/api/companies` | Create company |
-| `GET` | `/api/companies/{id}` | Get company by ID |
-| `GET` | `/api/companies` | Get all companies |
+| Method | Endpoint | Description | Status |
+| --- | --- | --- | --- |
+| `POST` | `/api/companies` | Create company | Implemented |
+| `GET` | `/api/companies/{id}` | Get company by ID | Implemented |
+| `GET` | `/api/companies` | Get all companies | Implemented |
+| `POST` | `/api/credit-applications` | Create a DRAFT credit application | Implemented |
+| `POST` | `/api/credit-applications/{id}/submit` | Submit a DRAFT application | Implemented |
 
 ## 8. Database & Migration
 
@@ -99,12 +110,14 @@ Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後
 - Hibernate 使用 `spring.jpa.hibernate.ddl-auto=validate` 驗證 Schema。
 - V1 Migration 為 `V1__create_company_table.sql`。
 - V1 已建立 `company`，Migration 紀錄保存於 `flyway_schema_history`。
+- V2 Migration 為 `V2__create_credit_applications_table.sql`。
+- V2 已建立 `credit_applications`，並以 Foreign Key `company_id` 參照 `company(id)`。
 
 ## 9. Security Status
 
 目前僅為 Development Configuration：
 
-- Health、Company API 與 `/error` 暫時設為 `permitAll`。
+- Health、Company API、CreditApplication API 與 `/error` 暫時設為 `permitAll`。
 - CSRF 暫時關閉。
 - 正式 Authentication、JWT 與 RBAC 尚未完成。
 
@@ -112,8 +125,9 @@ Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後
 
 已完成：
 
-- VS Code REST Client 人工 API 驗證。
-- PostgreSQL Persistence 寫入驗證。
+- VS Code REST Client 已人工驗證 Company API，以及 CreditApplication 建立與 Submit。
+- PostgreSQL 已人工確認資料寫入與 `DRAFT → SUBMITTED` 狀態轉換。
+- 重複 Submit 已由 Business Rule 阻擋；Exception Handling 尚未完成，因此目前回傳 500。
 - Maven `test` Lifecycle 驗證。
 - Maven `package` Lifecycle 驗證。
 
@@ -126,7 +140,6 @@ Stage 2 已於 2026-09-03 完成並推送至 GitHub，Tag 為 `v1-stage-2`。後
 
 ## 11. Roadmap
 
-- CreditApplication／Submit
 - CreditReview／Approve／Reject
 - CreditLimit
 - Security／JWT／RBAC／Maker-Checker

@@ -38,7 +38,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **Role** — RM、REVIEWER、ADMIN 等系統角色。
 - **AuditLog** — 業務操作 Audit 紀錄。
 
-目前僅 Company 已完成實作，其餘項目仍屬後續 Stage。
+目前已完成 Company，以及 CreditApplication 的建立與 Submit 流程；CreditReview、CreditLimit、Drawdown、User、Role 與 AuditLog 仍屬後續 Stage。
 
 ### Out of Scope
 
@@ -116,6 +116,8 @@ ADMIN 不是金融業務的 super user，不應自動取得不受限制的申請
 - CreditApplication `1:0..1` CreditLimit
 - CreditLimit `1:N` Drawdown
 
+目前 Company `1:N` CreditApplication 已完成；CreditApplication 端使用 `@ManyToOne(fetch = LAZY)`，`requestedAmount` 使用 `BigDecimal`。其餘關係仍為規劃。
+
 規劃中的 User 參照：
 
 - `CreditApplication.createdBy`
@@ -123,7 +125,7 @@ ADMIN 不是金融業務的 super user，不應自動取得不受限制的申請
 - `Drawdown.createdBy`
 - `AuditLog.user`
 
-精確的 ownership、fetch、cascade、identifier、indexing、locking 與金額欄位設計，將在排定的 Stage 中進行決策與 Review，不預先假設。
+其餘尚未實作 Domain 的 ownership、fetch、cascade、identifier、indexing、locking 與金額欄位設計，將在排定的 Stage 中進行決策與 Review，不預先假設。
 
 ## 5. Core Workflow
 
@@ -227,7 +229,7 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 
 1. Controller 不得包含核心 Business Logic。
 2. Controller 不得直接呼叫 Repository。
-3. API Request 使用 DTO；Response DTO 與 API Contract 隔離仍是後續要完善的設計原則。
+3. API Request 使用 DTO；CreditApplication 已使用 Response DTO 隔離 API Contract 與 Entity，其他 API 將依 Stage 持續完善。
 4. Transaction Boundary 主要放在 Service。
 5. 核心 Business Rules 必須有 Test。
 6. Password、JWT 與 Secret 絕對不得寫入 Log。
@@ -253,15 +255,15 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 
 ### API Map
 
-目前僅 Company APIs 已實作，其餘為規劃層級，並非目前已完成的 API Contract。
+目前已實作 Company APIs，以及 CreditApplication 的建立與 Submit API；其餘仍為規劃層級，並非目前已完成的 API Contract。
 
 | 功能 | Method／Path | 主要 Role | 狀態 |
 | --- | --- | --- | --- |
 | 建立 Company | `POST /api/companies` | RM | 已實作；正式 RBAC 未完成 |
 | 查詢 Company | `GET /api/companies`, `GET /api/companies/{id}` | 已授權的內部 User | 已實作；正式 RBAC 未完成 |
-| 建立 CreditApplication | `POST /api/credit-applications` | RM | 規劃 |
+| 建立 CreditApplication | `POST /api/credit-applications` | RM | 已實作；初始狀態固定 `DRAFT`；正式 RBAC 未完成 |
 | 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM | 規劃 |
-| Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 規劃 |
+| Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 已實作；僅允許 `DRAFT → SUBMITTED`；正式 RBAC 未完成 |
 | 查詢授信申請 | `GET /api/credit-applications` | RM, REVIEWER | 規劃 |
 | Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 規劃 |
 | Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 規劃 |
@@ -271,7 +273,7 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 | 管理 User／Role | `/api/admin/users`, `/api/admin/roles` | ADMIN | 規劃 |
 | 查詢 AuditLog | `GET /api/admin/audit-logs` | ADMIN | 規劃 |
 
-Company Create Request DTO 與基本 Validation 已完成。通用 Response DTO、Response Code、Filtering、Pagination、Idempotency、Concurrency Control 與 Error Contract，仍將在各功能設計時定義。
+Company Create Request DTO 與基本 Validation 已完成。CreditApplication 已完成 Create Request DTO 與 Response DTO，避免直接序列化 Hibernate LAZY Proxy。通用 Response Code、Filtering、Pagination、Idempotency、Concurrency Control 與 Error Contract，仍將在各功能設計時定義。
 
 ## 9. Database Strategy
 
@@ -281,7 +283,10 @@ Company Create Request DTO 與基本 Validation 已完成。通用 Response DTO�
 - Spring Data JPA、Jakarta Persistence／JPA 與 Hibernate Entity Mapping。
 - Flyway Core 與 Flyway PostgreSQL Support。
 - `V1__create_company_table.sql` Migration。
-- `company` 與 `flyway_schema_history`。
+- `V2__create_credit_applications_table.sql` Migration。
+- `company`、`credit_applications` 與 `flyway_schema_history`。
+- `credit_applications.company_id` Foreign Key 參照 `company(id)`。
+- CreditApplication 的 `requested_amount` 使用 `NUMERIC(19, 2)`，對應 Java `BigDecimal`。
 - `spring.jpa.hibernate.ddl-auto=validate`。
 
 原則：
@@ -305,7 +310,7 @@ Company Create Request DTO 與基本 Validation 已完成。通用 Response DTO�
 ### Current
 
 - 僅有 Development `SecurityConfig`，不是正式 Security 機制。
-- Health、Company API 與 `/error` 暫時設為 `permitAll`。
+- Health、Company API、`/api/credit-applications`、`/api/credit-applications/**` 與 `/error` 暫時設為 `permitAll`。
 - CSRF 暫時關閉。
 - 正式 Authentication、JWT 與 RBAC 尚未完成。
 
@@ -316,7 +321,9 @@ Company Create Request DTO 與基本 Validation 已完成。通用 Response DTO�
 - 尚未建立正式 Automated Test Classes。
 - Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`。
 - VS Code REST Client 人工 Company API 驗證已完成。
-- PostgreSQL Persistence 寫入驗證已完成。
+- VS Code REST Client 已人工驗證 CreditApplication 建立與 Submit 成功。
+- PostgreSQL 已人工確認 CreditApplication 資料寫入，以及 `DRAFT → SUBMITTED` 狀態轉換。
+- 重複 Submit 已由 Business Rule 阻擋；因 Exception Handling 尚未完成，目前仍回傳 500，預計於後續 Stage 統一處理。
 
 ### Unit Test
 
@@ -372,8 +379,8 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 0 | Project Planning／Initialization | Completed | 2026-08-22 |
 | Stage 1 | Spring Boot Skeleton | Completed | 2026-08-25 |
 | Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed | 2026-09-03 |
-| Stage 3 | CreditApplication／Submit | Next | - |
-| Stage 4 | CreditReview／Approve／Reject／CreditLimit | Planned | - |
+| Stage 3 | CreditApplication／Submit | Completed | 2026-09-04 |
+| Stage 4 | CreditReview／Approve／Reject／CreditLimit | Next | - |
 | Stage 5 | Security／JWT／RBAC／Maker-Checker | Planned | - |
 | Stage 6 | Drawdown／Transaction | Planned | - |
 | Stage 7 | Audit／Exception／Filtering／Pagination | Planned | - |
@@ -387,7 +394,7 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 - Stage 0：8/21–8/22
 - Stage 1：8/23–8/25
 - Stage 2：原訂 8/26，實際完成日為 9/3
-- Stage 3：原訂 8/27
+- Stage 3：原訂 8/27，實際完成日為 9/4
 - Stage 4：原訂 8/28–8/29
 - Stage 5：原訂 8/30–8/31
 - 9/1–9/2：不安排電腦開發
@@ -400,14 +407,19 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 
 ## 14. Current Status
 
-**Stage 2 Completed**
+**Stage 3 Completed**
 
-- PostgreSQL DataSource、JPA／Hibernate 與 Flyway V1 已完成。
-- Company Entity、Repository、Service、Request DTO、Validation、Controller 與三個 API 已完成。
-- REST Client 與 PostgreSQL 寫入人工驗證已完成。
+- CreditApplication Entity、`CreditApplicationStatus`、Repository、Service、Request／Response DTO 與 Controller 已完成。
+- Company `1:N` CreditApplication 已完成，CreditApplication 使用 LAZY `@ManyToOne`，`requestedAmount` 使用 `BigDecimal`。
+- `POST /api/credit-applications` 已完成，成功回傳 201，新申請狀態固定為 `DRAFT`。
+- `POST /api/credit-applications/{id}/submit` 已完成，成功回傳 200，僅允許 `DRAFT → SUBMITTED`。
+- Flyway V2 已建立 `credit_applications`，Foreign Key 指向 `company(id)`。
+- CreditApplication API 使用 Response DTO，避免直接序列化 Hibernate LAZY Proxy。
+- REST Client 與 PostgreSQL 人工驗證已確認建立、資料寫入及 `DRAFT → SUBMITTED`。
+- 重複 Submit 已由 Business Rule 阻擋；Exception Handling 尚未完成，目前回傳 500。
 - Maven `test`／`package` Lifecycle 均為 `BUILD SUCCESS`，但尚無正式 Automated Test Classes。
-- Stage 2 已於 2026-09-03 推送至 GitHub，Tag 為 `v1-stage-2`。
-- Stage 3 尚未開始。
+- Stage 3 完成日為 2026-09-04，目前尚未 commit、push 或建立 `v1-stage-3` Tag。
+- 下一階段為 Stage 4：CreditReview／Approve／Reject／CreditLimit。
 
 ## 15. Definition of Done
 

@@ -11,6 +11,21 @@ POST http://localhost:8080/api/companies
 Content-Type: application/json
 
 {
-  "name": "第七測試企業股份有限公司",
-  "taxId": "32085241"
+  "name": "第八測試企業股份有限公司",
+  "taxId": "34156258"
 }
+
+
+
+### 新增授信申請
+POST http://localhost:8080/api/credit-applications
+Content-Type: application/json
+
+{
+  "companyId": 13,
+  "requestedAmount": 7000000,
+  "purpose": "營運週轉"
+}
+
+### 送出授信申請
+POST http://localhost:8080/api/credit-applications/3/submit
