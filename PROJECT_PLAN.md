@@ -38,7 +38,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **Role** — RM、REVIEWER、ADMIN 等系統角色。
 - **AuditLog** — 業務操作 Audit 紀錄。
 
-目前已完成 Company，以及 CreditApplication 的建立與 Submit 流程；CreditReview、CreditLimit、Drawdown、User、Role 與 AuditLog 仍屬後續 Stage。
+目前已完成 Company、CreditApplication 建立與 Submit，以及 CreditReview、Approve／Reject 與 CreditLimit；Drawdown、User、Role、Maker-Checker 與 AuditLog 仍屬後續 Stage。
 
 ### Out of Scope
 
@@ -116,7 +116,7 @@ ADMIN 不是金融業務的 super user，不應自動取得不受限制的申請
 - CreditApplication `1:0..1` CreditLimit
 - CreditLimit `1:N` Drawdown
 
-目前 Company `1:N` CreditApplication 已完成；CreditApplication 端使用 `@ManyToOne(fetch = LAZY)`，`requestedAmount` 使用 `BigDecimal`。其餘關係仍為規劃。
+目前 Company `1:N` CreditApplication、CreditApplication `1:N` CreditReview，以及 CreditApplication `1:0..1` CreditLimit 已完成。CreditApplication 與 CreditReview 的多對一關聯均使用 LAZY；CreditLimit 對 CreditApplication 使用 LAZY `@OneToOne`，並以 UNIQUE `application_id` 保證每筆申請最多一筆額度。CreditLimit `1:N` Drawdown 仍為規劃。
 
 規劃中的 User 參照：
 
@@ -163,30 +163,34 @@ V1 刻意排除複雜的多階段簽核。
 - `approvedAmount` 不得大於 `requestedAmount`。
 - Reject 必須填寫原因。
 
+Stage 4 已完成 `SUBMITTED` 狀態檢查、重複 Review 防護、`approvedAmount > 0`、`approvedAmount <= requestedAmount`，以及 Reject comment 不得為 null／blank。REVIEWER Authorization 與 Maker-Checker 尚未完成，保留至 Stage 5。
+
 ### CreditLimit
 
 - 只有 APPROVED 的 CreditApplication 才能建立 CreditLimit。
 - 一個 CreditApplication 最多只能有一個 CreditLimit。
 - `usedAmount` 不得大於 `approvedAmount`。
 
+Stage 4 已完成由 Approve 流程建立唯一 CreditLimit，並在建立時令 `availableAmount = limitAmount`。`usedAmount`／Drawdown 規則仍保留至 Stage 6。
+
 ### Approve 與 Reject 的 Transaction Boundary
 
-成功執行 Approve 時，以下所有操作必須位於同一個 Transaction：
+Stage 4 已完成的 Approve Transaction 包含：
 
 1. 將 CreditApplication 從 `SUBMITTED` 轉換為 `APPROVED`。
 2. 建立 CreditReview。
 3. 建立該授信申請唯一的 CreditLimit。
-4. 建立 AuditLog。
 
-任何步驟失敗時，整個 Approve Transaction 都必須 rollback。不得留下只完成部分更新的授信申請、CreditReview、CreditLimit 或 AuditLog。
+`approve()` 使用 `@Transactional`；任何步驟失敗時，Application 狀態、CreditReview 與 CreditLimit 必須一起 rollback。Application 由 Repository 載入後是 managed Entity，狀態變更透過 JPA Dirty Checking 寫回。
 
-Reject 操作必須在同一個一致的 Transaction Boundary 中執行以下所有操作：
+Stage 4 已完成的 Reject Transaction 包含：
 
 1. 將 CreditApplication 從 `SUBMITTED` 轉換為 `REJECTED`。
 2. 建立 CreditReview。
-3. 建立 AuditLog。
 
-任何 Reject 步驟失敗時，Transaction 必須 rollback，且不得留下部分成功的資料。
+`reject()` 使用 `@Transactional`，且不建立 CreditLimit；任何失敗都不得留下部分成功的 Application 狀態或 CreditReview。
+
+AuditLog 尚未實作。待 Stage 7 加入後，Approve／Reject 的 AuditLog 必須納入同一個既有 Transaction Boundary。
 
 ### Drawdown
 
@@ -249,13 +253,13 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 - Flyway Core 與 Flyway PostgreSQL Support
 - Spring Boot Test Dependency
 
-後續規劃使用 JWT Authentication、OpenAPI／Swagger、JUnit 5、Mockito、Docker Compose 與 GitHub Actions。Testcontainers 為高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
+後續規劃使用 JWT Authentication、OpenAPI／Swagger、JUnit 5、Mockito 與 GitHub Actions；Docker Compose 保留至 Optional Stage 10。Testcontainers 為高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
 
 Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
 ### API Map
 
-目前已實作 Company APIs，以及 CreditApplication 的建立與 Submit API；其餘仍為規劃層級，並非目前已完成的 API Contract。
+目前已實作 Company APIs，以及 CreditApplication 的建立、Submit、Approve 與 Reject API；查詢、Drawdown、Security 與 Audit 相關 API 仍為規劃層級。
 
 | 功能 | Method／Path | 主要 Role | 狀態 |
 | --- | --- | --- | --- |
@@ -265,15 +269,15 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 | 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM | 規劃 |
 | Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 已實作；僅允許 `DRAFT → SUBMITTED`；正式 RBAC 未完成 |
 | 查詢授信申請 | `GET /api/credit-applications` | RM, REVIEWER | 規劃 |
-| Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 規劃 |
-| Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 規劃 |
+| Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 已實作；正式 RBAC／Maker-Checker 未完成 |
+| Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 已實作；正式 RBAC／Maker-Checker 未完成 |
 | 查看 CreditReview | `GET /api/credit-applications/{id}/reviews` | REVIEWER | 規劃 |
 | 查看 CreditLimit | `GET /api/credit-applications/{id}/credit-limit` | REVIEWER 與已授權的業務 User | 規劃 |
 | 建立 Drawdown | `POST /api/credit-limits/{id}/drawdowns` | RM | 規劃 |
 | 管理 User／Role | `/api/admin/users`, `/api/admin/roles` | ADMIN | 規劃 |
 | 查詢 AuditLog | `GET /api/admin/audit-logs` | ADMIN | 規劃 |
 
-Company Create Request DTO 與基本 Validation 已完成。CreditApplication 已完成 Create Request DTO 與 Response DTO，避免直接序列化 Hibernate LAZY Proxy。通用 Response Code、Filtering、Pagination、Idempotency、Concurrency Control 與 Error Contract，仍將在各功能設計時定義。
+Company Create Request DTO 與基本 Validation 已完成。CreditApplication 已完成 Create、Approve、Reject Request DTO 與 Response DTO；Response DTO 避免直接序列化 Hibernate LAZY Proxy。Business Rule 錯誤目前仍可能回傳 HTTP 500，正式 Exception Handling、通用 Response Code、Filtering、Pagination、Idempotency、Concurrency Control 與 Error Contract 留待後續 Stage。
 
 ## 9. Database Strategy
 
@@ -284,9 +288,13 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - Flyway Core 與 Flyway PostgreSQL Support。
 - `V1__create_company_table.sql` Migration。
 - `V2__create_credit_applications_table.sql` Migration。
-- `company`、`credit_applications` 與 `flyway_schema_history`。
+- `V3__create_credit_reviews_and_credit_limits_tables.sql` Migration。
+- `company`、`credit_applications`、`credit_reviews`、`credit_limits` 與 `flyway_schema_history`。
 - `credit_applications.company_id` Foreign Key 參照 `company(id)`。
+- `credit_reviews.application_id` Foreign Key 參照 `credit_applications(id)`，且不設 UNIQUE，以支援 CreditApplication `1:N` CreditReview。
+- `credit_limits.application_id` Foreign Key 參照 `credit_applications(id)`，並以 UNIQUE constraint 保證 CreditApplication `1:0..1` CreditLimit。
 - CreditApplication 的 `requested_amount` 使用 `NUMERIC(19, 2)`，對應 Java `BigDecimal`。
+- CreditReview 的 `approved_amount` 與 CreditLimit 的金額欄位均使用 `NUMERIC(19, 2)`，對應 Java `BigDecimal`。
 - `spring.jpa.hibernate.ddl-auto=validate`。
 
 原則：
@@ -324,6 +332,10 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - VS Code REST Client 已人工驗證 CreditApplication 建立與 Submit 成功。
 - PostgreSQL 已人工確認 CreditApplication 資料寫入，以及 `DRAFT → SUBMITTED` 狀態轉換。
 - 重複 Submit 已由 Business Rule 阻擋；因 Exception Handling 尚未完成，目前仍回傳 500，預計於後續 Stage 統一處理。
+- Stage 4 REST Client 與 PostgreSQL 人工驗證已完成：Application #4 由 requestedAmount 9,000,000 核准 6,000,000，最終狀態為 `APPROVED`，CreditReview decision 為 `APPROVED`，CreditLimit 的 limitAmount 與 availableAmount 均為 6,000,000。
+- Reject 人工驗證已完成：Application #6 的 requestedAmount 為 5,000,000，最終狀態為 `REJECTED`，CreditReview decision 為 `REJECTED`、approvedAmount 為 NULL，且未建立 CreditLimit。
+- DRAFT 直接 Approve、approvedAmount 大於 requestedAmount、Reject comment 空白，以及已 APPROVED 再次 Approve 均已人工確認被阻擋。
+- Stage 4 Business Rule 錯誤目前仍可能回傳 HTTP 500；正式 Exception Handling 留待 Stage 7。
 
 ### Unit Test
 
@@ -345,14 +357,18 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 
 ### Transaction Test
 
-Approve 任一步驟失敗時，驗證以下項目必須一併 rollback：
+Stage 4 現階段 Approve 任一步驟失敗時，驗證以下項目必須一併 rollback：
 
 - CreditApplication 不得錯誤地停留在 APPROVED。
 - CreditReview 不得只完成部分 insert。
 - CreditLimit 不得只完成部分 insert。
-- AuditLog 不得只完成部分 insert。
 
-Reject 任一步驟失敗時，驗證 CreditApplication、CreditReview 與 AuditLog 仍保持一致，且沒有部分結果被 commit。
+Stage 4 現階段 Reject 任一步驟失敗時，驗證以下項目：
+
+- CreditApplication 不得錯誤地停留在 REJECTED。
+- CreditReview 不得只完成部分 insert。
+
+AuditLog 尚未實作；待 Stage 7 完成後，再將 AuditLog rollback 驗證納入 Approve／Reject Transaction Test。
 
 Drawdown 失敗時，驗證以下所有項目：
 
@@ -362,13 +378,14 @@ Drawdown 失敗時，驗證以下所有項目：
 
 Testcontainers 是高優先加分項，但若時程壓力需要可省略。本專案不追求 100% Coverage；目標是充分涵蓋具風險的規則與 Boundary。
 
-## 12. Delivery／Docker／CI
+## 12. Delivery／CI 與 Optional Deployment
 
 - 前期開發：Local Java 加 Local PostgreSQL。
-- 後期 Packaging：以 Docker Compose 執行 Spring Boot 與 PostgreSQL。
+- 核心交付：可執行 JAR、文件、測試與最終驗證。
 - CI Platform：GitHub Actions。
 - 最低 CI Commands：`mvn test` 與 `mvn package`。
-- Public Deployment 為選配。
+- Docker／Docker Compose one-command startup 保留至 Optional Stage 10。
+- Public Deployment 保留至 Optional Stage 11。
 
 Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 或 Testing。
 
@@ -380,12 +397,30 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 1 | Spring Boot Skeleton | Completed | 2026-08-25 |
 | Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed | 2026-09-03 |
 | Stage 3 | CreditApplication／Submit | Completed | 2026-09-04 |
-| Stage 4 | CreditReview／Approve／Reject／CreditLimit | Next | - |
-| Stage 5 | Security／JWT／RBAC／Maker-Checker | Planned | - |
+| Stage 4 | CreditReview／Approve／Reject／CreditLimit | Completed | 2026-09-06 |
+| Stage 5 | Security／JWT／RBAC／Maker-Checker | Next | - |
 | Stage 6 | Drawdown／Transaction | Planned | - |
 | Stage 7 | Audit／Exception／Filtering／Pagination | Planned | - |
 | Stage 8 | Automated Tests／CI | Planned | - |
-| Stage 9 | Docker／Documentation／Final Verification | Planned | - |
+| Stage 9 | Documentation／Final Verification | Planned | - |
+| Stage 10 | Docker／Docker Compose／One-command Startup | Optional | - |
+| Stage 11 | Public Deployment | Optional | - |
+
+Stage 0～9 為核心必做；Stage 10～11 為 Optional，不得排擠 Business Logic、Security、Testing 等核心工作。
+
+### Stage 10 — Docker／Docker Compose／One-command Startup（Optional）
+
+- 建立 Spring Boot Dockerfile。
+- 使用 Docker Compose 啟動 Spring Boot 與 PostgreSQL。
+- 以 Environment Variables 提供資料庫連線與必要設定。
+- 啟動時由 Flyway 執行版本化 Migration。
+- README 提供一鍵啟動與必要環境設定說明。
+
+### Stage 11 — Public Deployment（Optional）
+
+- 將完成的核心系統部署至 Public Environment。
+- 僅在 Stage 0～9 核心工作穩定完成後進行。
+- 不得排擠 Business Logic、Security、Testing 或資料一致性工作。
 
 ### Original Schedule
 
@@ -403,23 +438,28 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 - Stage 8：原訂 9/6–9/7
 - Stage 9：原訂 9/8–9/10
 
+Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交付期限。
+
 2026-09-08 後不得新增大型功能。
 
 ## 14. Current Status
 
-**Stage 3 Completed**
+**Stage 4 Completed**
 
-- CreditApplication Entity、`CreditApplicationStatus`、Repository、Service、Request／Response DTO 與 Controller 已完成。
-- Company `1:N` CreditApplication 已完成，CreditApplication 使用 LAZY `@ManyToOne`，`requestedAmount` 使用 `BigDecimal`。
-- `POST /api/credit-applications` 已完成，成功回傳 201，新申請狀態固定為 `DRAFT`。
-- `POST /api/credit-applications/{id}/submit` 已完成，成功回傳 200，僅允許 `DRAFT → SUBMITTED`。
-- Flyway V2 已建立 `credit_applications`，Foreign Key 指向 `company(id)`。
-- CreditApplication API 使用 Response DTO，避免直接序列化 Hibernate LAZY Proxy。
-- REST Client 與 PostgreSQL 人工驗證已確認建立、資料寫入及 `DRAFT → SUBMITTED`。
-- 重複 Submit 已由 Business Rule 阻擋；Exception Handling 尚未完成，目前回傳 500。
-- Maven `test`／`package` Lifecycle 均為 `BUILD SUCCESS`，但尚無正式 Automated Test Classes。
-- Stage 3 完成日為 2026-09-04；commit 為 `feat: complete stage 3 credit application submit flow`，已推送至 `origin/main`，Tag `v1-stage-3` 亦已建立並推送至 origin。
-- 下一階段為 Stage 4：CreditReview／Approve／Reject／CreditLimit。
+- `CreditReviewDecision`、CreditReview、CreditLimit、對應 Repository，以及 Approve／Reject Request DTO 已完成。
+- CreditApplication `1:N` CreditReview 與 CreditApplication `1:0..1` CreditLimit 已完成；`credit_limits.application_id` 具有 UNIQUE constraint。
+- CreditApplication 已提供 `approve()`／`reject()` 狀態轉換；Service 已完成 Approve／Reject Business Logic。
+- Approve 僅接受 `SUBMITTED`，要求 `approvedAmount > 0` 且不得超過 requestedAmount；成功時轉為 `APPROVED`，建立 CreditReview 與 CreditLimit。
+- Reject 僅接受 `SUBMITTED`，comment 不得為 null／blank；成功時轉為 `REJECTED`，建立 CreditReview 且不建立 CreditLimit。
+- CreditLimit 建立時 `availableAmount = limitAmount`。
+- `approve()` 與 `reject()` 均使用 `@Transactional`；managed CreditApplication 的狀態變更透過 JPA Dirty Checking 寫回。
+- `POST /api/credit-applications/{id}/approve` 與 `POST /api/credit-applications/{id}/reject` 已完成，成功回傳 HTTP 200。
+- Flyway V3 已建立 `credit_reviews` 與 `credit_limits`。
+- REST Client 與 PostgreSQL 人工驗證已完成，包含成功 Approve／Reject 與四項錯誤情境。
+- Maven `test`／`package` Lifecycle 均為 `BUILD SUCCESS`，但尚無正式 Automated Test Source。
+- Business Rule 錯誤目前仍可能回傳 HTTP 500；正式 Exception Handling 留待 Stage 7。
+- AuditLog、正式 RBAC 與 Maker-Checker 尚未完成。
+- Stage 4 完成日為 2026-09-06；下一階段為 Stage 5：Security／JWT／RBAC／Maker-Checker。
 
 ## 15. Definition of Done
 
@@ -449,23 +489,24 @@ Stage Tags 為 `v1-stage-0` 至 `v1-stage-9`。最終 Release Tag 為 `v1.0.0`�
 
 ## 16. AI／Codex Collaboration Rules
 
-Codex 不得代替使用者完整撰寫核心實作。
+AI／Codex 協作以完成作品、理解架構與可驗證的學習流程並重。
 
-- 使用者負責理解與實作核心 Business Logic。
-- 第一次接觸核心技術時，由使用者先學習並撰寫第一版。
-- Codex 主要協助 Review、Boilerplate、重複工作、Automation、Documentation 與 Git 操作。
+- 每個 Stage 固定先學習必要基礎概念，再確認設計、Business Rule 與驗證方式。
+- AI／Codex 可以協助產生第一版程式碼與 Boilerplate，以加速作品完成。
+- 不要求使用者第一次接觸核心技術時，必須從空白自行默寫完整第一版。
+- 目前優先目標為完成作品，並熟悉 Spring Boot 架構與核心邏輯；語法手寫與 Live Coding 熟練度於後續模擬面試階段加強。
 - 未經明確同意，Codex 不得導入大型 Framework 或改變 Architecture。
 - 修改核心 Code 前，Codex 必須說明修改目的。
 - 修改後，Codex 必須列出變更檔案與每項變更原因。
 - 使用者必須 Review 所有核心 Diff。
 
-以下功能第一次實作時，Codex 不得從零建立完整功能：
+以下核心領域可由 AI／Codex 協助產生第一版，但不得以黑箱方式完成：
 
 - JPA Relationship
 - Transaction
-- Spring Security
-- Business Rules
-- Exception Handling
-- Integration Test
+- Security
+- Business Rule
+- Exception
+- Test
 
-即使 Code Generation 速度較快，這些規則仍要求 Assistant 在適當的學習／Review Boundary 暫停。
+使用者必須對上述核心領域逐段理解、Review 並驗證；AI／Codex 應清楚說明設計理由、風險與驗證結果，而不是只交付可執行程式碼。

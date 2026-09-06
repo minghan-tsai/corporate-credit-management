@@ -26,6 +26,7 @@ public class CreditApplication {
     private String purpose;
 
     // Enum 以字串形式存入 DB，例如 DRAFT、SUBMITTED。
+    // 不使用 ordinal，避免未來調整 enum 宣告順序時破壞既有資料語意。
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private CreditApplicationStatus status;
@@ -78,5 +79,16 @@ public class CreditApplication {
     // 執行送審動作，由 DRAFT 轉為 SUBMITTED。
     public void submit() {
         this.status = CreditApplicationStatus.SUBMITTED;
+    }
+
+    // 執行核准動作，由 SUBMITTED 轉為 APPROVED。
+    // Service Transaction 載入的 Application 是 managed Entity，狀態變更會由 Dirty Checking 寫回。
+    public void approve() {
+        this.status = CreditApplicationStatus.APPROVED;
+    }
+
+    // 執行駁回動作，由 SUBMITTED 轉為 REJECTED。
+    public void reject() {
+        this.status = CreditApplicationStatus.REJECTED;
     }
 }

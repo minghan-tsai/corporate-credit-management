@@ -6,13 +6,14 @@ GET http://localhost:8080/api/companies
 GET http://localhost:8080/api/companies/12
 
 
+### ==================== APPROVE ====================
 ### 新增公司
 POST http://localhost:8080/api/companies
 Content-Type: application/json
 
 {
-  "name": "第八測試企業股份有限公司",
-  "taxId": "34156258"
+  "name": "第九測試企業股份有限公司",
+  "taxId": "20235000"
 }
 
 
@@ -22,10 +23,43 @@ POST http://localhost:8080/api/credit-applications
 Content-Type: application/json
 
 {
-  "companyId": 13,
-  "requestedAmount": 7000000,
+  "companyId": 17,
+  "requestedAmount": 6000000,
   "purpose": "營運週轉"
 }
 
 ### 送出授信申請
-POST http://localhost:8080/api/credit-applications/3/submit
+POST http://localhost:8080/api/credit-applications/4/submit
+
+
+### 核准授信申請
+POST http://localhost:8080/api/credit-applications/4/approve
+Content-Type: application/json
+
+{
+  "approvedAmount": 6000000,
+  "comment": "Approved after credit review"
+}
+
+### ==================== REJECT ====================
+
+### 新增授信申請（Reject 測試）
+POST http://localhost:8080/api/credit-applications
+Content-Type: application/json
+
+{
+  "companyId": 13,
+  "requestedAmount": 5000000,
+  "purpose": "設備採購"
+}
+
+### 送出授信申請（Reject 測試）
+POST http://localhost:8080/api/credit-applications/6/submit
+
+### 駁回授信申請
+POST http://localhost:8080/api/credit-applications/6/reject
+Content-Type: application/json
+
+{
+  "comment": "Insufficient repayment capacity"
+}
