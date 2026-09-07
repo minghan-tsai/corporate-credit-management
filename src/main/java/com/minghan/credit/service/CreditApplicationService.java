@@ -1,7 +1,11 @@
 package com.minghan.credit.service;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,6 +13,7 @@ import com.minghan.credit.dto.ApproveCreditApplicationRequest;
 import com.minghan.credit.dto.CreateCreditApplicationRequest;
 import com.minghan.credit.dto.CreditApplicationResponse;
 import com.minghan.credit.dto.RejectCreditApplicationRequest;
+import com.minghan.credit.entity.AppUser;
 import com.minghan.credit.entity.Company;
 import com.minghan.credit.entity.CreditApplication;
 import com.minghan.credit.entity.CreditApplicationStatus;
@@ -16,6 +21,7 @@ import com.minghan.credit.entity.CreditLimit;
 import com.minghan.credit.entity.CreditReview;
 import com.minghan.credit.entity.CreditReviewDecision;
 import com.minghan.credit.repository.CompanyRepository;
+import com.minghan.credit.repository.AppUserRepository;
 import com.minghan.credit.repository.CreditApplicationRepository;
 import com.minghan.credit.repository.CreditLimitRepository;
 import com.minghan.credit.repository.CreditReviewRepository;
@@ -24,16 +30,19 @@ import com.minghan.credit.repository.CreditReviewRepository;
 public class CreditApplicationService {
 
     private final CompanyRepository companyRepository;
+    private final AppUserRepository appUserRepository;
     private final CreditApplicationRepository creditApplicationRepository;
     private final CreditReviewRepository creditReviewRepository;
     private final CreditLimitRepository creditLimitRepository;
 
     public CreditApplicationService(
             CompanyRepository companyRepository,
+            AppUserRepository appUserRepository,
             CreditApplicationRepository creditApplicationRepository,
             CreditReviewRepository creditReviewRepository,
             CreditLimitRepository creditLimitRepository) {
         this.companyRepository = companyRepository;
+        this.appUserRepository = appUserRepository;
         this.creditApplicationRepository = creditApplicationRepository;
         this.creditReviewRepository = creditReviewRepository;
         this.creditLimitRepository = creditLimitRepository;
@@ -49,8 +58,11 @@ public class CreditApplicationService {
         Company company = companyRepository.findById(request.companyId())
                 .orElseThrow(() -> new IllegalArgumentException("Company not found"));
 
+        AppUser createdBy = getCurrentUser();
+
         CreditApplication application = new CreditApplication(
                 company,
+                createdBy,
                 request.requestedAmount(),
                 request.purpose());
 
@@ -86,6 +98,8 @@ public class CreditApplicationService {
             ApproveCreditApplicationRequest request) {
         CreditApplication application = creditApplicationRepository.findById(applicationId)
                 .orElseThrow(() -> new IllegalArgumentException("Credit application not found"));
+
+        validateMakerChecker(application);
 
         if (application.getStatus() != CreditApplicationStatus.SUBMITTED) {
             throw new IllegalStateException("Only SUBMITTED application can be approved");
@@ -137,6 +151,8 @@ public class CreditApplicationService {
         CreditApplication application = creditApplicationRepository.findById(applicationId)
                 .orElseThrow(() -> new IllegalArgumentException("Credit application not found"));
 
+        validateMakerChecker(application);
+
         if (application.getStatus() != CreditApplicationStatus.SUBMITTED) {
             throw new IllegalStateException("Only SUBMITTED application can be rejected");
         }
@@ -171,5 +187,34 @@ public class CreditApplicationService {
                 application.getPurpose(),
                 application.getStatus(),
                 application.getCreatedAt());
+    }
+
+    private AppUser getCurrentUser() {
+        // JWT filter 已把 UserDetails 放入 SecurityContext，這裡再查回 domain AppUser。
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            throw new IllegalStateException("Authenticated user is required");
+        }
+
+        return appUserRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
+    }
+
+    private void validateMakerChecker(CreditApplication application) {
+        AppUser reviewer = getCurrentUser();
+        AppUser createdBy = application.getCreatedBy();
+
+        if (createdBy == null) {
+            throw new IllegalStateException("Credit application maker is required for review");
+        }
+
+        // 比對持久化 ID，避免同一人因 Entity instance 不同而繞過職責分離規則。
+        if (Objects.equals(reviewer.getId(), createdBy.getId())) {
+            throw new IllegalStateException(
+                    "Maker cannot approve or reject their own credit application");
+        }
     }
 }

@@ -18,6 +18,11 @@ public class CreditApplication {
     @JoinColumn(name = "company_id", nullable = false)
     private Company company;
 
+    // 每筆授信申請由一位登入使用者建立，作為 Maker-Checker 判斷依據。
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "created_by", nullable = false)
+    private AppUser createdBy;
+
     // 金融金額使用 BigDecimal，避免 double 浮點精度誤差。
     @Column(name = "requested_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal requestedAmount;
@@ -40,9 +45,11 @@ public class CreditApplication {
 
     public CreditApplication(
             Company company,
+            AppUser createdBy,
             BigDecimal requestedAmount,
             String purpose) {
         this.company = company;
+        this.createdBy = createdBy;
         this.requestedAmount = requestedAmount;
         this.purpose = purpose;
         
@@ -58,6 +65,10 @@ public class CreditApplication {
 
     public Company getCompany() {
         return company;
+    }
+
+    public AppUser getCreatedBy() {
+        return createdBy;
     }
 
     public BigDecimal getRequestedAmount() {

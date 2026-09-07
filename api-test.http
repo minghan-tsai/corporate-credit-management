@@ -63,3 +63,155 @@ Content-Type: application/json
 {
   "comment": "Insufficient repayment capacity"
 }
+
+### ==================== Stage 5 Security ====================
+
+@baseUrl = http://localhost:8080
+
+@rmUsername = stage5_rm
+@rmPassword = RmPass123!
+
+@reviewerUsername = stage5_reviewer
+@reviewerPassword = ReviewerPass123!
+
+# 測試前請用 manual-test profile 啟動：
+# .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=manual-test"
+
+# Login 後，把回傳的 JWT 手動貼到下面
+@rmToken = PASTE_RM_JWT_HERE
+@reviewerToken = PASTE_REVIEWER_JWT_HERE
+# 建立公司 / 授信申請後，把回傳 id 手動填入
+@stage5CompanyId = 0
+# 一般 RBAC 測試使用的授信申請 ID，與 Maker-Checker 案件分開。
+@stage5ApplicationId = 0
+
+
+### 1. RM Login — expected 200
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{rmUsername}}",
+  "password": "{{rmPassword}}"
+}
+
+
+### 2. REVIEWER Login — expected 200
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{reviewerUsername}}",
+  "password": "{{reviewerPassword}}"
+}
+
+
+### 3. 未登入建立授信申請 — expected 403
+POST {{baseUrl}}/api/credit-applications
+Content-Type: application/json
+
+{
+  "companyId": {{stage5CompanyId}},
+  "requestedAmount": 1000000,
+  "purpose": "Unauthenticated request test"
+}
+
+
+### 4. 無效 JWT — expected 403
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer invalid.jwt.token
+Content-Type: application/json
+
+{
+  "companyId": {{stage5CompanyId}},
+  "requestedAmount": 1000000,
+  "purpose": "Invalid JWT test"
+}
+
+
+### 5. RM 建立授信申請 — expected 201
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage5CompanyId}},
+  "requestedAmount": 3000000,
+  "purpose": "Stage 5 Security Test"
+}
+
+
+### 6. RM Submit — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage5ApplicationId}}/submit
+Authorization: Bearer {{rmToken}}
+
+
+### 7. RM 嘗試 Approve — expected 403
+POST {{baseUrl}}/api/credit-applications/{{stage5ApplicationId}}/approve
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "approvedAmount": 6000000,
+  "comment": "RM should not approve"
+}
+
+
+### 8. RM 嘗試 Reject — expected 403
+POST {{baseUrl}}/api/credit-applications/{{stage5ApplicationId}}/reject
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "comment": "RM should not reject"
+}
+
+
+### 9. REVIEWER Approve — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage5ApplicationId}}/approve
+Authorization: Bearer {{reviewerToken}}
+Content-Type: application/json
+
+{
+  "approvedAmount": 6000000,
+  "comment": "Approved by reviewer"
+}
+
+### ==================== Stage 5 Maker-Checker ====================
+
+# 流程：
+# 1. 用 stage5_rm 建立一筆新的 CreditApplication
+# 2. 用 stage5_rm Submit
+# 3. 執行 manual-test-maker-checker.sql 第一個 UPDATE
+#    把 stage5_rm 暫時改成 REVIEWER
+# 4. 重新登入 stage5_rm
+# 5. 把新 JWT 貼到 makerReviewerToken
+# 6. 用同一人 Approve 自己建立的案件
+# 7. expected 500
+# 8. 執行第二個 UPDATE，把 stage5_rm 改回 RM
+
+
+@makerReviewerToken = PASTE_MAKER_REVIEWER_JWT_HERE
+# Maker-Checker 專用案件 ID，不要填入一般 RBAC 的 stage5ApplicationId。
+@makerApplicationId = 0
+
+
+### 10. Maker 改成 REVIEWER 後重新登入 — expected 200
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{rmUsername}}",
+  "password": "{{rmPassword}}"
+}
+
+
+### 11. 同一個人 Approve 自己建立的案件 — expected 500
+POST {{baseUrl}}/api/credit-applications/{{makerApplicationId}}/approve
+Authorization: Bearer {{makerReviewerToken}}
+Content-Type: application/json
+
+{
+  "approvedAmount": 3000000,
+  "comment": "Maker must not approve own application"
+}

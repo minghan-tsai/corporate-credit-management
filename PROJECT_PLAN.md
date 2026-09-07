@@ -38,7 +38,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **Role** — RM、REVIEWER、ADMIN 等系統角色。
 - **AuditLog** — 業務操作 Audit 紀錄。
 
-目前已完成 Company、CreditApplication 建立與 Submit，以及 CreditReview、Approve／Reject 與 CreditLimit；Drawdown、User、Role、Maker-Checker 與 AuditLog 仍屬後續 Stage。
+目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit，以及 AppUser／Role、Authentication、JWT、RBAC 與 Maker-Checker；Drawdown 與 AuditLog 仍屬後續 Stage。
 
 ### Out of Scope
 
@@ -85,7 +85,7 @@ RM 不得 Approve 或 Reject 授信申請。
 
 Maker-Checker 是一條獨立的 Business Rule，而不只是 RM 與 REVIEWER 被賦予不同 Endpoint 權限後的自然結果。即使 User 的 Role 允許執行 Review，Service 層在允許 Approve 或 Reject 前，仍必須驗證 reviewer 與 `CreditApplication.createdBy` 不是同一位 User。只依賴 Endpoint Authorization 並不足以落實 Segregation of Duties。
 
-User 與 Role 要採用單一 Role 或多 Role 關係，仍是留待 Security／RBAC Stage 決定的明確設計議題。Maker-Checker 規則在任一模型下都必須成立。
+Stage 5 採用 AppUser 對單一 Role 的模型，角色包含 RM、REVIEWER 與 ADMIN；Maker-Checker 仍作為獨立於 Endpoint Authorization 的 Service Business Rule。
 
 ### ADMIN
 
@@ -112,15 +112,16 @@ ADMIN 不是金融業務的 super user，不應自動取得不受限制的申請
 ### Relationships
 
 - Company `1:N` CreditApplication
+- AppUser `1:N` CreditApplication（`createdBy`）
 - CreditApplication `1:N` CreditReview
 - CreditApplication `1:0..1` CreditLimit
 - CreditLimit `1:N` Drawdown
 
-目前 Company `1:N` CreditApplication、CreditApplication `1:N` CreditReview，以及 CreditApplication `1:0..1` CreditLimit 已完成。CreditApplication 與 CreditReview 的多對一關聯均使用 LAZY；CreditLimit 對 CreditApplication 使用 LAZY `@OneToOne`，並以 UNIQUE `application_id` 保證每筆申請最多一筆額度。CreditLimit `1:N` Drawdown 仍為規劃。
+目前 Company `1:N` CreditApplication、AppUser `1:N` CreditApplication、CreditApplication `1:N` CreditReview，以及 CreditApplication `1:0..1` CreditLimit 已完成。CreditApplication 的 Company／createdBy 與 CreditReview 的多對一關聯均使用 LAZY；CreditLimit 對 CreditApplication 使用 LAZY `@OneToOne`，並以 UNIQUE `application_id` 保證每筆申請最多一筆額度。CreditLimit `1:N` Drawdown 仍為規劃。
 
-規劃中的 User 參照：
+User 參照：
 
-- `CreditApplication.createdBy`
+- `CreditApplication.createdBy`（已完成）
 - `CreditReview.reviewedBy`
 - `Drawdown.createdBy`
 - `AuditLog.user`
@@ -163,7 +164,7 @@ V1 刻意排除複雜的多階段簽核。
 - `approvedAmount` 不得大於 `requestedAmount`。
 - Reject 必須填寫原因。
 
-Stage 4 已完成 `SUBMITTED` 狀態檢查、重複 Review 防護、`approvedAmount > 0`、`approvedAmount <= requestedAmount`，以及 Reject comment 不得為 null／blank。REVIEWER Authorization 與 Maker-Checker 尚未完成，保留至 Stage 5。
+Stage 4 已完成 `SUBMITTED` 狀態檢查、重複 Review 防護、`approvedAmount > 0`、`approvedAmount <= requestedAmount`，以及 Reject comment 不得為 null／blank；Stage 5 已完成 REVIEWER Authorization 與 Maker-Checker。
 
 ### CreditLimit
 
@@ -247,30 +248,32 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 - Spring Boot 3.5.16，可執行 JAR
 - Spring Web
 - Spring Data JPA
-- Spring Security Dependency
+- Spring Security
+- JJWT
 - Spring Validation
 - PostgreSQL JDBC Driver
 - Flyway Core 與 Flyway PostgreSQL Support
 - Spring Boot Test Dependency
 
-後續規劃使用 JWT Authentication、OpenAPI／Swagger、JUnit 5、Mockito 與 GitHub Actions；Docker Compose 保留至 Optional Stage 10。Testcontainers 為高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
+JWT Authentication 已於 Stage 5 完成；後續規劃使用 OpenAPI／Swagger、JUnit 5、Mockito 與 GitHub Actions。Docker Compose 保留至 Optional Stage 10。Testcontainers 為高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
 
 Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
 ### API Map
 
-目前已實作 Company APIs，以及 CreditApplication 的建立、Submit、Approve 與 Reject API；查詢、Drawdown、Security 與 Audit 相關 API 仍為規劃層級。
+目前已實作 Login、Company APIs，以及 CreditApplication 的建立、Submit、Approve 與 Reject API；授信端點已套用 JWT、RBAC 與 Maker-Checker。查詢、Drawdown 與 Audit 相關 API 仍為規劃層級。
 
 | 功能 | Method／Path | 主要 Role | 狀態 |
 | --- | --- | --- | --- |
+| Login | `POST /api/auth/login` | Anonymous | 已實作；成功簽發 JWT |
 | 建立 Company | `POST /api/companies` | RM | 已實作；正式 RBAC 未完成 |
 | 查詢 Company | `GET /api/companies`, `GET /api/companies/{id}` | 已授權的內部 User | 已實作；正式 RBAC 未完成 |
-| 建立 CreditApplication | `POST /api/credit-applications` | RM | 已實作；初始狀態固定 `DRAFT`；正式 RBAC 未完成 |
+| 建立 CreditApplication | `POST /api/credit-applications` | RM | 已實作；初始狀態固定 `DRAFT`；自動記錄 `createdBy` |
 | 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM | 規劃 |
-| Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 已實作；僅允許 `DRAFT → SUBMITTED`；正式 RBAC 未完成 |
+| Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 已實作；僅允許 `DRAFT → SUBMITTED`；RBAC 已完成 |
 | 查詢授信申請 | `GET /api/credit-applications` | RM, REVIEWER | 規劃 |
-| Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 已實作；正式 RBAC／Maker-Checker 未完成 |
-| Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 已實作；正式 RBAC／Maker-Checker 未完成 |
+| Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 已實作；RBAC／Maker-Checker 已完成 |
+| Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 已實作；RBAC／Maker-Checker 已完成 |
 | 查看 CreditReview | `GET /api/credit-applications/{id}/reviews` | REVIEWER | 規劃 |
 | 查看 CreditLimit | `GET /api/credit-applications/{id}/credit-limit` | REVIEWER 與已授權的業務 User | 規劃 |
 | 建立 Drawdown | `POST /api/credit-limits/{id}/drawdowns` | RM | 規劃 |
@@ -289,8 +292,11 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - `V1__create_company_table.sql` Migration。
 - `V2__create_credit_applications_table.sql` Migration。
 - `V3__create_credit_reviews_and_credit_limits_tables.sql` Migration。
-- `company`、`credit_applications`、`credit_reviews`、`credit_limits` 與 `flyway_schema_history`。
+- `V4__create_app_user_table.sql` Migration。
+- `V5__add_created_by_to_credit_applications.sql` Migration。
+- `company`、`app_user`、`credit_applications`、`credit_reviews`、`credit_limits` 與 `flyway_schema_history`。
 - `credit_applications.company_id` Foreign Key 參照 `company(id)`。
+- `credit_applications.created_by` Foreign Key 參照 `app_user(id)`。
 - `credit_reviews.application_id` Foreign Key 參照 `credit_applications(id)`，且不設 UNIQUE，以支援 CreditApplication `1:N` CreditReview。
 - `credit_limits.application_id` Foreign Key 參照 `credit_applications(id)`，並以 UNIQUE constraint 保證 CreditApplication `1:0..1` CreditLimit。
 - CreditApplication 的 `requested_amount` 使用 `NUMERIC(19, 2)`，對應 Java `BigDecimal`。
@@ -307,20 +313,15 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 
 ## 10. Security Strategy
 
-### Planned
-
-- Authentication
-- JWT
-- RBAC
-- RM、REVIEWER、ADMIN 權限邊界
-- Maker-Checker／Segregation of Duties
-
 ### Current
 
-- 僅有 Development `SecurityConfig`，不是正式 Security 機制。
-- Health、Company API、`/api/credit-applications`、`/api/credit-applications/**` 與 `/error` 暫時設為 `permitAll`。
-- CSRF 暫時關閉。
-- 正式 Authentication、JWT 與 RBAC 尚未完成。
+- AppUser 使用單一 Role（RM、REVIEWER、ADMIN），密碼以 BCrypt 保存並由 UserDetailsService 載入。
+- Login API 透過 AuthenticationManager 驗證帳密，成功後簽發以 username 為 subject 的 JWT。
+- JWT Secret 由外部設定提供；JWT Filter 驗證 signature 與 expiration，並建立 Spring SecurityContext。
+- Session 採 Stateless，`/api/auth/login` 維持 `permitAll`，授信流程需通過 Authentication。
+- Method-level Security 以 `@PreAuthorize` 限制 RM 建立／Submit、REVIEWER Approve／Reject；ADMIN 不自動取得授信流程權限。
+- Service 以 `CreditApplication.createdBy` 比對目前登入者，禁止 maker Approve／Reject 自己的案件。
+- `manual-test` profile 使用 CommandLineRunner 初始化 BCrypt 測試帳號，不以測試 seed 污染 Flyway migration history。
 
 ## 11. Testing Strategy
 
@@ -336,6 +337,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - Reject 人工驗證已完成：Application #6 的 requestedAmount 為 5,000,000，最終狀態為 `REJECTED`，CreditReview decision 為 `REJECTED`、approvedAmount 為 NULL，且未建立 CreditLimit。
 - DRAFT 直接 Approve、approvedAmount 大於 requestedAmount、Reject comment 空白，以及已 APPROVED 再次 Approve 均已人工確認被阻擋。
 - Stage 4 Business Rule 錯誤目前仍可能回傳 HTTP 500；正式 Exception Handling 留待 Stage 7。
+- Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證 Login、JWT、未登入／無效 JWT、RM／REVIEWER RBAC 與 Maker-Checker。
 
 ### Unit Test
 
@@ -398,8 +400,8 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed | 2026-09-03 |
 | Stage 3 | CreditApplication／Submit | Completed | 2026-09-04 |
 | Stage 4 | CreditReview／Approve／Reject／CreditLimit | Completed | 2026-09-06 |
-| Stage 5 | Security／JWT／RBAC／Maker-Checker | Next | - |
-| Stage 6 | Drawdown／Transaction | Planned | - |
+| Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed | 2026-09-07 |
+| Stage 6 | Drawdown／Transaction | Next | - |
 | Stage 7 | Audit／Exception／Filtering／Pagination | Planned | - |
 | Stage 8 | Automated Tests／CI | Planned | - |
 | Stage 9 | Documentation／Final Verification | Planned | - |
@@ -444,22 +446,19 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 
 ## 14. Current Status
 
-**Stage 4 Completed**
+**Current Stage：Stage 5 Completed**
 
-- `CreditReviewDecision`、CreditReview、CreditLimit、對應 Repository，以及 Approve／Reject Request DTO 已完成。
-- CreditApplication `1:N` CreditReview 與 CreditApplication `1:0..1` CreditLimit 已完成；`credit_limits.application_id` 具有 UNIQUE constraint。
-- CreditApplication 已提供 `approve()`／`reject()` 狀態轉換；Service 已完成 Approve／Reject Business Logic。
-- Approve 僅接受 `SUBMITTED`，要求 `approvedAmount > 0` 且不得超過 requestedAmount；成功時轉為 `APPROVED`，建立 CreditReview 與 CreditLimit。
-- Reject 僅接受 `SUBMITTED`，comment 不得為 null／blank；成功時轉為 `REJECTED`，建立 CreditReview 且不建立 CreditLimit。
-- CreditLimit 建立時 `availableAmount = limitAmount`。
-- `approve()` 與 `reject()` 均使用 `@Transactional`；managed CreditApplication 的狀態變更透過 JPA Dirty Checking 寫回。
-- `POST /api/credit-applications/{id}/approve` 與 `POST /api/credit-applications/{id}/reject` 已完成，成功回傳 HTTP 200。
-- Flyway V3 已建立 `credit_reviews` 與 `credit_limits`。
-- REST Client 與 PostgreSQL 人工驗證已完成，包含成功 Approve／Reject 與四項錯誤情境。
+**Next Stage：Stage 6 — Drawdown／Transaction**
+
+- AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
+- BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
+- JWT 產生／驗證、JWT Authentication Filter、SecurityContext 建立與 Stateless Session 已完成。
+- Method-level RBAC 已限制 RM 建立／Submit，以及 REVIEWER Approve／Reject；ADMIN 不作為授信流程 super user。
+- Maker-Checker 已在 Service 層阻擋建立者 Approve／Reject 自己的案件。
+- `manual-test` profile 以 CommandLineRunner 建立本機 BCrypt 測試帳號，並已完成人工 Security 整合驗證。
 - Maven `test`／`package` Lifecycle 均為 `BUILD SUCCESS`，但尚無正式 Automated Test Source。
 - Business Rule 錯誤目前仍可能回傳 HTTP 500；正式 Exception Handling 留待 Stage 7。
-- AuditLog、正式 RBAC 與 Maker-Checker 尚未完成。
-- Stage 4 完成日為 2026-09-06；下一階段為 Stage 5：Security／JWT／RBAC／Maker-Checker。
+- Stage 5 完成日為 2026-09-07；下一階段為 Stage 6：Drawdown／Transaction。
 
 ## 15. Definition of Done
 

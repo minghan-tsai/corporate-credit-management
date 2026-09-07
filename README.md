@@ -8,7 +8,7 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 
 `Company → CreditApplication → Submit → Review → Approve / Reject → CreditLimit → Drawdown`
 
-目前已完成 Company Backend／APIs、CreditApplication 建立與 Submit，以及 CreditReview、Approve／Reject 與 CreditLimit；下一階段為 Stage 5 Security／JWT／RBAC／Maker-Checker。
+目前已完成 Company Backend／APIs、CreditApplication 建立與審核流程，以及基本登入、JWT、RBAC 與 Maker-Checker；下一階段為 Stage 6 Drawdown／Transaction。
 
 ## 3. Current Progress
 
@@ -19,9 +19,10 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 | Stage 2 | PostgreSQL／JPA／Flyway／Company API | Completed |
 | Stage 3 | CreditApplication／Submit | Completed |
 | Stage 4 | CreditReview／Approve／Reject／CreditLimit | Completed |
-| Stage 5 | Security／JWT／RBAC／Maker-Checker | Next |
+| Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed |
+| Stage 6 | Drawdown／Transaction | Next |
 
-Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+Stage 5 已於 2026-09-07 完成實作與人工驗證；後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
 
 ## 4. Implemented Features
 
@@ -53,6 +54,10 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 - `POST /api/credit-applications/{id}/reject`。
 - Flyway V2 Migration：`V2__create_credit_applications_table.sql`。
 - Flyway V3 Migration：建立 `credit_reviews` 與 `credit_limits`。
+- AppUser／Role、BCrypt PasswordEncoder 與 Spring Security UserDetailsService。
+- Login API、JWT Authentication 與 Stateless Security。
+- RM／REVIEWER RBAC，以及以 `CreditApplication.createdBy` 落實的 Maker-Checker。
+- Flyway V4／V5 Migration：建立 `app_user`，並為授信申請加入 `created_by`。
 - VS Code REST Client 人工 API 驗證。
 - PostgreSQL 實際寫入驗證。
 - Maven `test` 與 `package` Lifecycle `BUILD SUCCESS`。
@@ -89,8 +94,10 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 
 ### Security
 
-- Spring Security Dependency
-- 正式 Authentication、JWT 與 RBAC 尚未完成
+- Spring Security
+- BCrypt PasswordEncoder／UserDetailsService
+- Login API／JWT Authentication／Stateless Session
+- Method-level RBAC／Maker-Checker
 
 ### Testing
 
@@ -101,8 +108,8 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 
 ### Later Stages
 
-- Stage 5：Security／JWT／RBAC／Maker-Checker
-- Stage 6：Drawdown／Transaction
+- Stage 5：Security／JWT／RBAC／Maker-Checker（Completed）
+- Stage 6：Drawdown／Transaction（Next）
 - Stage 7：Audit／Exception／Filtering／Pagination
 - Stage 8：Automated Tests／CI
 - Stage 9：Documentation／Final Verification
@@ -113,6 +120,7 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 
 | Method | Endpoint | Description | Status |
 | --- | --- | --- | --- |
+| `POST` | `/api/auth/login` | Authenticate and issue JWT | Implemented |
 | `POST` | `/api/companies` | Create company | Implemented |
 | `GET` | `/api/companies/{id}` | Get company by ID | Implemented |
 | `GET` | `/api/companies` | Get all companies | Implemented |
@@ -132,14 +140,16 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 - V2 已建立 `credit_applications`，並以 Foreign Key `company_id` 參照 `company(id)`。
 - V3 Migration 為 `V3__create_credit_reviews_and_credit_limits_tables.sql`。
 - V3 已建立 `credit_reviews` 與 `credit_limits`；兩者皆以 `application_id` 參照 `credit_applications(id)`，且只有 `credit_limits.application_id` 具有 UNIQUE constraint。
+- V4 Migration 建立 `app_user`，V5 Migration 為 `credit_applications` 加入 `created_by` Foreign Key。
 
 ## 9. Security Status
 
-目前僅為 Development Configuration：
+Stage 5 已完成基本 Security Boundary：
 
-- Health、Company API、CreditApplication API 與 `/error` 暫時設為 `permitAll`。
-- CSRF 暫時關閉。
-- 正式 Authentication、JWT 與 RBAC 尚未完成。
+- Login API 驗證帳密並簽發 JWT；Bearer token 由 JWT Filter 驗證後建立 SecurityContext。
+- Session 採 Stateless，CSRF 關閉；`/api/auth/login` 可匿名存取，授信流程需通過 Authentication 與 method-level RBAC。
+- RM 可建立與 Submit 授信申請，REVIEWER 可 Approve／Reject；Service 層 Maker-Checker 禁止建立者審核自己的案件。
+- Health、Company API 與 `/error` 仍維持目前開發階段的 `permitAll` 設定。
 
 ## 10. Testing Status
 
@@ -152,6 +162,7 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 - DRAFT 直接 Approve、核准金額超過申請金額、空白 Reject comment，以及已 APPROVED 後再次 Approve 均已確認被 Business Rule 阻擋。
 - 重複 Submit 已由 Business Rule 阻擋；Exception Handling 尚未完成，因此目前回傳 500。
 - Stage 4 Business Rule 錯誤目前亦可能回傳 HTTP 500，正式 Exception Handling 留待後續 Stage。
+- Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證登入、JWT、未登入／無效 token、RBAC 與 Maker-Checker。
 - Maven `test` Lifecycle 驗證。
 - Maven `package` Lifecycle 驗證。
 
@@ -159,13 +170,13 @@ Stage 4 已於 2026-09-06 完成實作與人工驗證；後續進度請參考 [P
 
 - Unit Tests
 - Integration Tests
-- Security Tests
+- Automated Security Tests
 - Transaction Tests
 
 ## 11. Roadmap
 
-- Stage 5：Security／JWT／RBAC／Maker-Checker
-- Stage 6：Drawdown／Transaction
+- Stage 5：Security／JWT／RBAC／Maker-Checker（Completed：2026-09-07）
+- Stage 6：Drawdown／Transaction（Next）
 - Stage 7：Audit／Exception／Filtering／Pagination
 - Stage 8：Automated Tests／CI
 - Stage 9：Documentation／Final Verification
