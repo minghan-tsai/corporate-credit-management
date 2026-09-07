@@ -353,7 +353,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 
 至少驗證：
 
-- 未登入的 Request 回傳 401。
+- 未登入的 Request 目前回傳 403；正式 Authentication / Authorization Error Contract 將於 Stage 7 統一處理。
 - RM 呼叫 Approve 回傳 403。
 - REVIEWER 合法執行 Approve 時成功。
 
