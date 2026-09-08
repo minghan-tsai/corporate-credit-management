@@ -61,4 +61,10 @@ public class CreditLimit {
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+
+    // DrawdownService 已先完成金額與可用額度驗證；
+    // 這裡只封裝額度狀態的變更，並由 Transaction 的 Dirty Checking 寫回資料庫。
+    public void decreaseAvailableAmount(BigDecimal amount) {
+        this.availableAmount = this.availableAmount.subtract(amount);
+    }
 }

@@ -78,9 +78,10 @@ Content-Type: application/json
 # .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=manual-test"
 
 # Login 後，把回傳的 JWT 手動貼到下面
-@rmToken = PASTE_RM_JWT_HERE
-@reviewerToken = PASTE_REVIEWER_JWT_HERE
-# 建立公司 / 授信申請後，把回傳 id 手動填入
+# PASTE_RM_JWT_HERE
+@rmToken =
+# PASTE_REVIEWER_JWT_HERE
+@reviewerToken =
 @stage5CompanyId = 0
 # 一般 RBAC 測試使用的授信申請 ID，與 Maker-Checker 案件分開。
 @stage5ApplicationId = 0
@@ -214,4 +215,48 @@ Content-Type: application/json
 {
   "approvedAmount": 3000000,
   "comment": "Maker must not approve own application"
+}
+
+### ==================== Stage 6 Drawdown ====================
+
+@stage6CreditLimitId = 3
+
+
+### 1. RM 正常建立 Drawdown — expected 201
+POST {{baseUrl}}/api/credit-limits/{{stage6CreditLimitId}}/drawdowns
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "amount": 100000.00
+}
+
+
+### 2. RM 超額 Drawdown — expected 400
+POST {{baseUrl}}/api/credit-limits/{{stage6CreditLimitId}}/drawdowns
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "amount": 6000000.00
+}
+
+
+### 3. RM Drawdown amount = 0 — expected 400
+POST {{baseUrl}}/api/credit-limits/{{stage6CreditLimitId}}/drawdowns
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "amount": 0
+}
+
+
+### 4. REVIEWER 不可建立 Drawdown — expected 403
+POST {{baseUrl}}/api/credit-limits/{{stage6CreditLimitId}}/drawdowns
+Authorization: Bearer {{reviewerToken}}
+Content-Type: application/json
+
+{
+  "amount": 100000.00
 }
