@@ -32,8 +32,7 @@ public class CompanyController {
 
     @GetMapping("/{id}")
     public Company getById(@PathVariable Long id) {
-        return companyService.findById(id)
-                .orElseThrow();
+        return companyService.getById(id);
     }
 
     @GetMapping

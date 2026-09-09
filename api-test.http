@@ -260,3 +260,184 @@ Content-Type: application/json
 {
   "amount": 100000.00
 }
+
+### ==================== Stage 7 Exception / Audit / Filtering / Pagination ====================
+
+# 前置條件：
+# 1. 沿用 Stage 5 的 manual-test profile、rmToken 與 reviewerToken。
+# 2. stage7CompanyId 必須是已存在的 Company ID。
+# 3. 每次 CREATE 後，將 response 的 id 貼到對應 application 變數。
+# 4. APPROVE 完成後，以本文末 SQL 查出 CreditLimit ID，再填入 stage7CreditLimitId。
+# 5. DRAWDOWN 完成後，將 response 的 id 填入 stage7DrawdownId。
+
+@stage7CompanyId = 19
+@stage7ApproveApplicationId = 0
+@stage7RejectApplicationId = 13
+@stage7CreditLimitId = 4
+@stage7DrawdownId = 0
+@stage7MissingApplicationId = 999999999
+
+
+### 1. CreditApplication 分頁查全部 — expected 200
+GET {{baseUrl}}/api/credit-applications?page=0&size=20
+Authorization: Bearer {{rmToken}}
+
+
+### 2. status filtering — expected 200，content 只包含 SUBMITTED
+GET {{baseUrl}}/api/credit-applications?status=SUBMITTED&page=0&size=20
+Authorization: Bearer {{reviewerToken}}
+
+
+### 3. Spring Data sort — expected 200，createdAt 由新到舊
+GET {{baseUrl}}/api/credit-applications?page=0&size=10&sort=createdAt,desc
+Authorization: Bearer {{reviewerToken}}
+
+
+### 4. 非法 status — expected 400，使用 Stage 7.1 ApiErrorResponse
+GET {{baseUrl}}/api/credit-applications?status=UNKNOWN&page=0&size=20
+Authorization: Bearer {{rmToken}}
+
+
+### 5. 非法 page — expected 400
+GET {{baseUrl}}/api/credit-applications?page=-1&size=20
+Authorization: Bearer {{rmToken}}
+
+
+### 6. 非法 size — expected 400
+GET {{baseUrl}}/api/credit-applications?page=0&size=0
+Authorization: Bearer {{rmToken}}
+
+
+### 7. size 超過 100 — expected 400
+GET {{baseUrl}}/api/credit-applications?page=0&size=101
+Authorization: Bearer {{rmToken}}
+
+
+### 8. ResourceNotFoundException — expected 404，且不得新增 audit log
+POST {{baseUrl}}/api/credit-applications/{{stage7MissingApplicationId}}/submit
+Authorization: Bearer {{rmToken}}
+
+
+### 9. Bean Validation error — expected 400，validationErrors 包含 name 與 taxId
+POST {{baseUrl}}/api/companies
+Content-Type: application/json
+
+{
+  "name": "",
+  "taxId": "123"
+}
+
+
+### 10. CREATE_CREDIT_APPLICATION — expected 201；完成後更新 stage7ApproveApplicationId
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage7CompanyId}},
+  "requestedAmount": 1000000.00,
+  "purpose": "Stage 7 approve and audit verification"
+}
+
+
+### 11. SUBMIT_CREDIT_APPLICATION — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage7ApproveApplicationId}}/submit
+Authorization: Bearer {{rmToken}}
+
+
+### 12. 重複 Submit BusinessRuleException — expected 409，且 submit audit 仍只能有一筆
+POST {{baseUrl}}/api/credit-applications/{{stage7ApproveApplicationId}}/submit
+Authorization: Bearer {{rmToken}}
+
+
+### 13. APPROVE_CREDIT_APPLICATION — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage7ApproveApplicationId}}/approve
+Authorization: Bearer {{reviewerToken}}
+Content-Type: application/json
+
+{
+  "approvedAmount": 800000.00,
+  "comment": "Stage 7 audit approve"
+}
+
+
+### 14. 建立 Reject 專用 Application — expected 201；完成後更新 stage7RejectApplicationId
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage7CompanyId}},
+  "requestedAmount": 500000.00,
+  "purpose": "Stage 7 reject audit verification"
+}
+
+
+### 15. Submit Reject 專用 Application — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage7RejectApplicationId}}/submit
+Authorization: Bearer {{rmToken}}
+
+
+### 16. REJECT_CREDIT_APPLICATION — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage7RejectApplicationId}}/reject
+Authorization: Bearer {{reviewerToken}}
+Content-Type: application/json
+
+{
+  "comment": "Stage 7 audit reject"
+}
+
+
+### 17. CREATE_DRAWDOWN — expected 201；完成後更新 stage7DrawdownId
+# 先執行：SELECT id FROM credit_limits WHERE application_id = <stage7ApproveApplicationId>;
+POST {{baseUrl}}/api/credit-limits/{{stage7CreditLimitId}}/drawdowns
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "amount": 100000.00
+}
+
+
+### 18. 超額 Drawdown BusinessRuleException — expected 409，且不得新增 CREATE_DRAWDOWN audit
+POST {{baseUrl}}/api/credit-limits/{{stage7CreditLimitId}}/drawdowns
+Authorization: Bearer {{rmToken}}
+Content-Type: application/json
+
+{
+  "amount": 999999999.00
+}
+
+
+### 19. Audit verification SQL（請在 psql／DB client 執行）
+# SELECT id, actor_username, action, entity_type, entity_id, created_at
+# FROM audit_logs
+# WHERE (entity_type = 'CREDIT_APPLICATION'
+#        AND entity_id IN (<stage7ApproveApplicationId>, <stage7RejectApplicationId>))
+#    OR (entity_type = 'DRAWDOWN' AND entity_id = <stage7DrawdownId>)
+# ORDER BY id;
+
+# 預期 actor/action：
+# stage5_rm       / CREATE_CREDIT_APPLICATION  / CREDIT_APPLICATION / approve application ID
+# stage5_rm       / SUBMIT_CREDIT_APPLICATION  / CREDIT_APPLICATION / approve application ID（只能一筆）
+# stage5_reviewer / APPROVE_CREDIT_APPLICATION / CREDIT_APPLICATION / approve application ID
+# stage5_rm       / CREATE_CREDIT_APPLICATION  / CREDIT_APPLICATION / reject application ID
+# stage5_rm       / SUBMIT_CREDIT_APPLICATION  / CREDIT_APPLICATION / reject application ID
+# stage5_reviewer / REJECT_CREDIT_APPLICATION  / CREDIT_APPLICATION / reject application ID
+# stage5_rm       / CREATE_DRAWDOWN             / DRAWDOWN           / drawdown ID
+
+
+### 20. 失敗 action 不得留下成功 audit（請在 DB client 執行）
+# 重複 Submit 失敗後，下列 count 必須仍為 1：
+# SELECT COUNT(*)
+# FROM audit_logs
+# WHERE actor_username = 'stage5_rm'
+#   AND action = 'SUBMIT_CREDIT_APPLICATION'
+#   AND entity_type = 'CREDIT_APPLICATION'
+#   AND entity_id = <stage7ApproveApplicationId>;
+
+# 超額 Drawdown 前後，可用下列 SQL 比對；count 不得增加：
+# SELECT COUNT(*)
+# FROM audit_logs
+# WHERE actor_username = 'stage5_rm'
+#   AND action = 'CREATE_DRAWDOWN';

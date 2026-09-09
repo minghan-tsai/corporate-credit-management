@@ -38,7 +38,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **Role** — RM、REVIEWER、ADMIN 等系統角色。
 - **AuditLog** — 業務操作 Audit 紀錄。
 
-目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit、Drawdown，以及 AppUser／Role、Authentication、JWT、RBAC 與 Maker-Checker；AuditLog 仍屬後續 Stage。
+目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit、Drawdown，以及 AppUser／Role、Authentication、JWT、RBAC、Maker-Checker 與 AuditLog；Stage 7 另完成全域錯誤處理及 CreditApplication 查詢分頁。
 
 ### Out of Scope
 
@@ -124,7 +124,7 @@ User 參照：
 - `CreditApplication.createdBy`（已完成）
 - `CreditReview.reviewedBy`
 - `Drawdown.createdBy`（已完成）
-- `AuditLog.user`
+- `AuditLog.actorUsername`（已完成；保存 SecurityContext username snapshot）
 
 其餘尚未實作 Domain 的 ownership、fetch、cascade、identifier、indexing、locking 與金額欄位設計，將在排定的 Stage 中進行決策與 Review，不預先假設。
 
@@ -191,35 +191,36 @@ Stage 4 已完成的 Reject Transaction 包含：
 
 `reject()` 使用 `@Transactional`，且不建立 CreditLimit；任何失敗都不得留下部分成功的 Application 狀態或 CreditReview。
 
-AuditLog 尚未實作。待 Stage 7 加入後，Approve／Reject 的 AuditLog 必須納入同一個既有 Transaction Boundary。
+Stage 7 已將 Approve／Reject 的 AuditLog 納入同一個既有 Transaction Boundary；business action 或 Audit write 失敗時一起 rollback。
 
 ### Drawdown
 
-- `amount` 不得為 null，且必須大於零並不得超過 `availableAmount`；Business Validation 回傳 400。
+- `amount` 不得為 null 且必須大於零，否則回傳 400；超過 `availableAmount` 屬於 Business Conflict，回傳 409。
 - CreditLimit 不存在時回傳 404。
 - `POST /api/credit-limits/{creditLimitId}/drawdowns` 僅允許 RM，並從 JWT SecurityContext 取得目前使用者作為 `createdBy`。
 - `DrawdownService.create()` 使用 `@Transactional`，以 `PESSIMISTIC_WRITE` 鎖定 CreditLimit，再建立 Drawdown 並扣減 `availableAmount`。
 - CreditLimit 是 managed Entity，額度扣減透過 JPA Dirty Checking 寫回；任一步驟失敗時整筆交易 rollback。
-- AuditLog 尚未實作，將於 Stage 7 納入既有 Transaction Boundary。
+- Stage 7 已將 `CREATE_DRAWDOWN` AuditLog 納入既有 Transaction Boundary；超額失敗時 availableAmount 不變且不產生成功 Audit。
 
 ## 7. Audit Strategy
 
-V1 規劃的 Audit Actions：
+Stage 7 已完成的 Audit Actions：
 
-- `CREATE_COMPANY`
-- `CREATE_APPLICATION`
-- `SUBMIT_APPLICATION`
-- `APPROVE_APPLICATION`
-- `REJECT_APPLICATION`
+- `CREATE_CREDIT_APPLICATION`
+- `SUBMIT_CREDIT_APPLICATION`
+- `APPROVE_CREDIT_APPLICATION`
+- `REJECT_CREDIT_APPLICATION`
 - `CREATE_DRAWDOWN`
 
-AuditLog 至少包含：
+AuditLog 包含：
 
-- `userId`
+- `actorUsername`
 - `action`
-- `targetType`
-- `targetId`
-- `timestamp`
+- `entityType`
+- `entityId`
+- `createdAt`
+
+`action` 與 `entityType` 分別使用 `AuditAction`／`AuditEntityType` enum。Actor 由 JWT 建立的 SecurityContext 取得，只保存 username，不保存 JWT、密碼或 Authorization credential。`AuditLogService.record()` 使用 `Propagation.MANDATORY`，強制 Audit write 加入既有 business transaction。
 
 Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在何時對哪個 Target 執行相關操作的持久性業務紀錄。兩者是不同概念，不得視為可互換的資訊。
 
@@ -262,7 +263,7 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 
 ### API Map
 
-目前已實作 Login、Company APIs、CreditApplication 的建立／Submit／Approve／Reject，以及 Drawdown API；授信端點已套用 JWT 與 RBAC，審核另有 Maker-Checker。查詢與 Audit 相關 API 仍為規劃層級。
+目前已實作 Login、Company APIs、CreditApplication 的建立／Submit／Approve／Reject／分頁查詢，以及 Drawdown API；授信端點已套用 JWT 與 RBAC，審核另有 Maker-Checker。Audit write 已完成，AuditLog 查詢 API 仍為規劃層級。
 
 | 功能 | Method／Path | 主要 Role | 狀態 |
 | --- | --- | --- | --- |
@@ -272,7 +273,7 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 | 建立 CreditApplication | `POST /api/credit-applications` | RM | 已實作；初始狀態固定 `DRAFT`；自動記錄 `createdBy` |
 | 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM | 規劃 |
 | Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 已實作；僅允許 `DRAFT → SUBMITTED`；RBAC 已完成 |
-| 查詢授信申請 | `GET /api/credit-applications` | RM, REVIEWER | 規劃 |
+| 查詢授信申請 | `GET /api/credit-applications` | Authenticated User | 已實作；支援 status、page、size、sort |
 | Approve 授信申請 | `POST /api/credit-applications/{id}/approve` | REVIEWER | 已實作；RBAC／Maker-Checker 已完成 |
 | Reject 授信申請 | `POST /api/credit-applications/{id}/reject` | REVIEWER | 已實作；RBAC／Maker-Checker 已完成 |
 | 查看 CreditReview | `GET /api/credit-applications/{id}/reviews` | REVIEWER | 規劃 |
@@ -281,7 +282,7 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 | 管理 User／Role | `/api/admin/users`, `/api/admin/roles` | ADMIN | 規劃 |
 | 查詢 AuditLog | `GET /api/admin/audit-logs` | ADMIN | 規劃 |
 
-Company Create Request DTO 與基本 Validation 已完成。CreditApplication 與 Drawdown 已使用 Request／Response DTO，避免直接序列化 Hibernate LAZY Proxy。Stage 6 已將 CreditLimit 不存在映射為 404、Drawdown 金額 Business Validation 映射為 400；其餘正式 Exception Handling、通用 Response Code、Filtering、Pagination、Idempotency 與 Error Contract 留待 Stage 7。
+Company Create Request DTO 與基本 Validation 已完成。CreditApplication 與 Drawdown 已使用 Request／Response DTO，避免直接序列化 Hibernate LAZY Proxy。Stage 7 已以 `@RestControllerAdvice`／`@ExceptionHandler` 與 `ApiErrorResponse` 統一 400／404／409 response；未預期錯誤維持 500 且不暴露內部細節。CreditApplication 查詢已支援 status filtering、DB pagination、sorting、page／size validation 與最大 size 100。
 
 ## 9. Database Strategy
 
@@ -296,7 +297,8 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - `V4__create_app_user_table.sql` Migration。
 - `V5__add_created_by_to_credit_applications.sql` Migration。
 - `V6__create_drawdowns_table.sql` Migration。
-- `company`、`app_user`、`credit_applications`、`credit_reviews`、`credit_limits`、`drawdowns` 與 `flyway_schema_history`。
+- `V7__create_audit_logs_table.sql` Migration。
+- `company`、`app_user`、`credit_applications`、`credit_reviews`、`credit_limits`、`drawdowns`、`audit_logs` 與 `flyway_schema_history`。
 - `credit_applications.company_id` Foreign Key 參照 `company(id)`。
 - `credit_applications.created_by` Foreign Key 參照 `app_user(id)`。
 - `credit_reviews.application_id` Foreign Key 參照 `credit_applications(id)`，且不設 UNIQUE，以支援 CreditApplication `1:N` CreditReview。
@@ -336,14 +338,17 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - VS Code REST Client 人工 Company API 驗證已完成。
 - VS Code REST Client 已人工驗證 CreditApplication 建立與 Submit 成功。
 - PostgreSQL 已人工確認 CreditApplication 資料寫入，以及 `DRAFT → SUBMITTED` 狀態轉換。
-- 重複 Submit 已由 Business Rule 阻擋；因 Exception Handling 尚未完成，目前仍回傳 500，預計於後續 Stage 統一處理。
+- 重複 Submit 已由 Business Rule 阻擋；Stage 7 全域錯誤處理回傳 409 Conflict。
 - Stage 4 REST Client 與 PostgreSQL 人工驗證已完成：Application #4 由 requestedAmount 9,000,000 核准 6,000,000，最終狀態為 `APPROVED`，CreditReview decision 為 `APPROVED`，CreditLimit 的 limitAmount 與 availableAmount 均為 6,000,000。
 - Reject 人工驗證已完成：Application #6 的 requestedAmount 為 5,000,000，最終狀態為 `REJECTED`，CreditReview decision 為 `REJECTED`、approvedAmount 為 NULL，且未建立 CreditLimit。
 - DRAFT 直接 Approve、approvedAmount 大於 requestedAmount、Reject comment 空白，以及已 APPROVED 再次 Approve 均已人工確認被阻擋。
-- Stage 4 Business Rule 錯誤目前仍可能回傳 HTTP 500；正式 Exception Handling 留待 Stage 7。
+- Stage 4 原有 Business Rule 錯誤已於 Stage 7 納入一致的 400／404／409 error contract。
 - Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證 Login、JWT、未登入／無效 JWT、RM／REVIEWER RBAC 與 Maker-Checker。
-- Stage 6 已人工驗證 RM 正常建立 Drawdown（201）、超額與 amount = 0（400），以及 REVIEWER 建立 Drawdown（403）。
+- Stage 6 已人工驗證 RM 正常建立 Drawdown（201）、amount = 0（400）、超額（409 Conflict），以及 REVIEWER 建立 Drawdown（403）。
 - `DrawdownServiceTest` 已驗證 CreditLimit 不存在及 null／0／負數／超額金額，共 5 tests PASS。
+- Stage 7 automated tests 共 29 個，涵蓋 Global Exception Handling、Audit、Transaction Boundary、CreditApplication filtering／pagination 與 Drawdown business conflict；`mvnw test` 為 0 failures／0 errors。
+- Stage 7 Manual Test 已驗證 pagination、filtering、sorting、400／404／409、Approve／Reject／Drawdown Audit Trail、失敗 action 不產生成功 Audit，以及超額 Drawdown 後 availableAmount 不變。
+- `mvnw package` 為 `BUILD SUCCESS`，`git diff --check` PASS。
 
 ### Unit Test
 
@@ -359,7 +364,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 
 至少驗證：
 
-- 未登入的 Request 目前回傳 403；正式 Authentication / Authorization Error Contract 將於 Stage 7 統一處理。
+- Controller／Service 內的 AuthenticationException 與 AccessDeniedException 已分別納入 401／403 mapping；Security filter chain 的既有行為仍另行驗證。
 - RM 呼叫 Approve 回傳 403。
 - REVIEWER 合法執行 Approve 時成功。
 
@@ -376,7 +381,7 @@ Stage 4 現階段 Reject 任一步驟失敗時，驗證以下項目：
 - CreditApplication 不得錯誤地停留在 REJECTED。
 - CreditReview 不得只完成部分 insert。
 
-AuditLog 尚未實作；待 Stage 7 完成後，再將 AuditLog rollback 驗證納入 Approve／Reject Transaction Test。
+Stage 7 已以 `Propagation.MANDATORY` 強制 AuditLog 加入 Approve／Reject 的既有 transaction，並以 automated test 驗證所有 audited actions 都具備 transaction boundary。真實資料庫 rollback integration test 留待 Stage 8。
 
 Drawdown 失敗時，驗證以下所有項目：
 
@@ -408,8 +413,8 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 4 | CreditReview／Approve／Reject／CreditLimit | Completed | 2026-09-06 |
 | Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed | 2026-09-07 |
 | Stage 6 | Drawdown／Transaction | Completed | 2026-09-08 |
-| Stage 7 | Audit／Exception／Filtering／Pagination | Next | - |
-| Stage 8 | Automated Tests／CI | Planned | - |
+| Stage 7 | Audit／Exception／Filtering／Pagination | Completed | 2026-09-09 |
+| Stage 8 | Automated Tests／CI | Next | - |
 | Stage 9 | Documentation／Final Verification | Planned | - |
 | Stage 10 | Docker／Docker Compose／One-command Startup | Optional | - |
 | Stage 11 | Public Deployment | Optional | - |
@@ -452,9 +457,9 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 
 ## 14. Current Status
 
-**Current Stage：Stage 6 Completed**
+**Current Stage：Stage 7 Completed**
 
-**Next Stage：Stage 7 — Audit／Exception／Filtering／Pagination**
+**Next Stage：Stage 8 — Automated Tests／CI**
 
 - AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
 - BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
@@ -463,9 +468,14 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 - Maker-Checker 已在 Service 層阻擋建立者 Approve／Reject 自己的案件。
 - `manual-test` profile 以 CommandLineRunner 建立本機 BCrypt 測試帳號，並已完成人工 Security 整合驗證。
 - Drawdown 已完成 RM-only RBAC、JWT current user／`createdBy`、交易邊界、Pessimistic Lock、`availableAmount` 扣減與 Dirty Checking。
-- Drawdown 的 CreditLimit 不存在回傳 404，null／0／負數／超額金額回傳 400；REVIEWER 建立回傳 403。
+- Drawdown 的 CreditLimit 不存在回傳 404，null／0／負數回傳 400，超額 availableAmount 回傳 409；REVIEWER 建立回傳 403。
 - Stage 6 人工測試 PASS；`DrawdownServiceTest` 5 tests PASS，Maven `test` Lifecycle 為 `BUILD SUCCESS`。
-- Stage 6 完成日為 2026-09-08；下一階段為 Stage 7：Audit／Exception／Filtering／Pagination。
+- Stage 7 已完成 `@RestControllerAdvice`／`@ExceptionHandler`、統一 `ApiErrorResponse`，以及 400／404／409 error mapping。
+- AuditLog 已以 enum action／entity type、SecurityContext actor 與 `Propagation.MANDATORY` 納入五項核心 business transactions。
+- CreditApplication list API 已完成 status filtering、DB pagination、sorting、page／size validation 與 Response DTO。
+- Stage 7 automated tests 共 29 個，`mvnw test` 0 failures／0 errors，`mvnw package` 與 `git diff --check` 均 PASS。
+- Stage 7 Manual Test 已驗證查詢、錯誤 response、Audit Trail、失敗 action 不留成功 Audit，以及超額 Drawdown rollback 行為。
+- Stage 7 完成日為 2026-09-09；下一階段為 Stage 8：Automated Tests／CI。
 
 ## 15. Definition of Done
 

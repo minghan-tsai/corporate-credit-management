@@ -2,23 +2,33 @@ package com.minghan.credit.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.SortDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.minghan.credit.dto.ApproveCreditApplicationRequest;
 import com.minghan.credit.dto.CreateCreditApplicationRequest;
+import com.minghan.credit.dto.CreditApplicationPageResponse;
 import com.minghan.credit.dto.CreditApplicationResponse;
 import com.minghan.credit.dto.RejectCreditApplicationRequest;
+import com.minghan.credit.entity.CreditApplicationStatus;
+import com.minghan.credit.exception.InvalidRequestException;
 import com.minghan.credit.service.CreditApplicationService;
 
 @RestController
 @RequestMapping("/api/credit-applications")
 public class CreditApplicationController {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final CreditApplicationService creditApplicationService;
 
@@ -44,6 +54,18 @@ public class CreditApplicationController {
         return creditApplicationService.submit(id);
     }
 
+    @GetMapping
+    public CreditApplicationPageResponse findAll(
+            @RequestParam(required = false) CreditApplicationStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
+        validatePagination(page, size);
+        return creditApplicationService.findAll(
+                status,
+                PageRequest.of(page, size, sort));
+    }
+
     // Controller 只處理 HTTP contract；審核規則與 Transaction Boundary 由 Service 負責。
     // 核准已送審的授信申請。
     // REVIEWER 權限只代表可以審核，仍須通過 Service 層 Maker-Checker。
@@ -64,5 +86,20 @@ public class CreditApplicationController {
             @RequestBody RejectCreditApplicationRequest request) {
         creditApplicationService.reject(id, request);
         return ResponseEntity.ok().build();
+    }
+
+    private void validatePagination(int page, int size) {
+        if (page < 0) {
+            throw new InvalidRequestException("Page must be zero or greater");
+        }
+
+        if (size < 1) {
+            throw new InvalidRequestException("Size must be greater than zero");
+        }
+
+        if (size > MAX_PAGE_SIZE) {
+            throw new InvalidRequestException(
+                    "Size must not exceed " + MAX_PAGE_SIZE);
+        }
     }
 }

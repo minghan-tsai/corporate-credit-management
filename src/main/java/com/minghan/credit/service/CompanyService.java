@@ -1,6 +1,7 @@
 package com.minghan.credit.service;
 
 import com.minghan.credit.entity.Company;
+import com.minghan.credit.exception.ResourceNotFoundException;
 import com.minghan.credit.repository.CompanyRepository;
 import org.springframework.stereotype.Service;
 import java.util.Optional;
@@ -23,6 +24,11 @@ public class CompanyService {
 
     public Optional<Company> findById(Long id) {
         return companyRepository.findById(id);
+    }
+
+    public Company getById(Long id) {
+        return companyRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Company not found"));
     }
 
     public List<Company> findAll() {

@@ -8,7 +8,7 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 
 `Company → CreditApplication → Submit → Review → Approve / Reject → CreditLimit → Drawdown`
 
-目前已完成 Company Backend／APIs、CreditApplication 建立與審核流程、登入／JWT／RBAC／Maker-Checker，以及 Drawdown 額度動用與交易一致性控制；下一階段為 Stage 7 Audit／Exception／Filtering／Pagination。
+目前已完成 Company Backend／APIs、CreditApplication 建立與審核流程、登入／JWT／RBAC／Maker-Checker、Drawdown 額度動用，以及 Stage 7 的全域錯誤處理、Audit Trail、Filtering 與 Pagination；下一階段為 Stage 8 Automated Tests／CI。
 
 ## 3. Current Progress
 
@@ -21,9 +21,10 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 | Stage 4 | CreditReview／Approve／Reject／CreditLimit | Completed |
 | Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed |
 | Stage 6 | Drawdown／Transaction | Completed |
-| Stage 7 | Audit／Exception／Filtering／Pagination | Next |
+| Stage 7 | Audit／Exception／Filtering／Pagination | Completed |
+| Stage 8 | Automated Tests／CI | Next |
 
-Stage 6 已於 2026-09-08 完成實作、人工驗證與核心 Service Unit Tests；後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+Stage 7 已於 2026-09-09 完成實作、自動化測試與人工驗證；後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
 
 ## 4. Implemented Features
 
@@ -62,8 +63,13 @@ Stage 6 已於 2026-09-08 完成實作、人工驗證與核心 Service Unit Test
 - Drawdown Entity、Request／Response DTO、Repository、Service 與 Controller；CreditLimit `1:N` Drawdown，並以 JWT current user 記錄 `createdBy`。
 - `POST /api/credit-limits/{creditLimitId}/drawdowns` 僅允許 RM；REVIEWER 呼叫回傳 403。
 - Drawdown 使用 `@Transactional` 與 `PESSIMISTIC_WRITE` 鎖定 CreditLimit，扣減 `availableAmount` 後由 JPA Dirty Checking 寫回。
-- Drawdown 金額不得為 null、0、負數或超過可用額度；CreditLimit 不存在回傳 404，其餘 Business Validation 回傳 400。
+- Drawdown 金額不得為 null、0、負數或超過可用額度；基本輸入錯誤回傳 400、CreditLimit 不存在回傳 404、超額動用回傳 409 Conflict。
 - Flyway V6 Migration：建立 `drawdowns`、CreditLimit／AppUser Foreign Keys 與索引。
+- `@RestControllerAdvice`／`@ExceptionHandler` 與統一 `ApiErrorResponse`，將 input、not-found、business conflict 分別映射為 400、404、409，未預期錯誤維持安全的 500 response。
+- `AuditLog` 以 `AuditAction`／`AuditEntityType` enum 記錄 actor 與五項核心 business actions；`Propagation.MANDATORY` 確保 Audit 與原 business transaction 一起 commit／rollback。
+- `GET /api/credit-applications` 支援 status filtering、pagination 與標準 Spring Data sorting，並在資料庫層完成分頁、以 Response DTO 回傳。
+- Page／size validation 與最大 page size 100 防護。
+- Flyway V7 Migration：建立 `audit_logs` 與 entity lookup index。
 - VS Code REST Client 人工 API 驗證。
 - PostgreSQL 實際寫入驗證。
 - Maven `test` 與 `package` Lifecycle `BUILD SUCCESS`。
@@ -78,6 +84,7 @@ Stage 6 已於 2026-09-08 完成實作、人工驗證與核心 Service Unit Test
 - Business Logic 原則上放在 Service。
 - Approve／Reject 的 Transaction Boundary 已放在 Service，確保狀態與 Review／Limit 一致更新。
 - Drawdown 的 Transaction Boundary 位於 Service，並以 Pessimistic Lock 防止同一額度並行超額動用。
+- Audit write 加入相同的 business transaction，失敗時不會留下宣稱成功的 AuditLog。
 
 ## 6. Tech Stack
 
@@ -110,15 +117,15 @@ Stage 6 已於 2026-09-08 完成實作、人工驗證與核心 Service Unit Test
 
 - Spring Boot Test Dependency
 - Maven Lifecycle 驗證成功
-- Stage 4、Stage 5 與 Stage 6 REST Client 人工驗證完成
-- `DrawdownServiceTest` 使用 JUnit 5／Mockito，5 tests PASS
+- Stage 4～Stage 7 REST Client 人工驗證完成
+- Stage 7 完成 29 個 automated tests，Maven `test` 與 `package` 均為 `BUILD SUCCESS`
 
 ### Later Stages
 
 - Stage 5：Security／JWT／RBAC／Maker-Checker（Completed）
 - Stage 6：Drawdown／Transaction（Completed）
-- Stage 7：Audit／Exception／Filtering／Pagination（Next）
-- Stage 8：Automated Tests／CI
+- Stage 7：Audit／Exception／Filtering／Pagination（Completed）
+- Stage 8：Automated Tests／CI（Next）
 - Stage 9：Documentation／Final Verification
 - Stage 10（Optional）：Docker／Docker Compose／One-command Startup
 - Stage 11（Optional）：Public Deployment
@@ -131,6 +138,7 @@ Stage 6 已於 2026-09-08 完成實作、人工驗證與核心 Service Unit Test
 | `POST` | `/api/companies` | Create company | Implemented |
 | `GET` | `/api/companies/{id}` | Get company by ID | Implemented |
 | `GET` | `/api/companies` | Get all companies | Implemented |
+| `GET` | `/api/credit-applications?status=&page=&size=&sort=` | Filter and page credit applications | Implemented |
 | `POST` | `/api/credit-applications` | Create a DRAFT credit application | Implemented |
 | `POST` | `/api/credit-applications/{id}/submit` | Submit a DRAFT application | Implemented |
 | `POST` | `/api/credit-applications/{id}/approve` | Approve a SUBMITTED application | Implemented |
@@ -150,6 +158,7 @@ Stage 6 已於 2026-09-08 完成實作、人工驗證與核心 Service Unit Test
 - V3 已建立 `credit_reviews` 與 `credit_limits`；兩者皆以 `application_id` 參照 `credit_applications(id)`，且只有 `credit_limits.application_id` 具有 UNIQUE constraint。
 - V4 Migration 建立 `app_user`，V5 Migration 為 `credit_applications` 加入 `created_by` Foreign Key。
 - V6 Migration 建立 `drawdowns`，並以 Foreign Key 參照 `credit_limits` 與 `app_user`。
+- V7 Migration 建立 `audit_logs`，保存 actor username、action、entity type／ID 與建立時間。
 
 ## 9. Security Status
 
@@ -170,13 +179,16 @@ Stage 5 已完成基本 Security Boundary：
 - Stage 4 Approve 人工驗證：Application #4 由 9,000,000 核准 6,000,000，最終為 `APPROVED`，並建立 `APPROVED` Review 與 limit／available amount 均為 6,000,000 的 CreditLimit。
 - Stage 4 Reject 人工驗證：Application #6（requestedAmount 5,000,000）最終為 `REJECTED`，Review 的 approvedAmount 為 NULL，且未建立 CreditLimit。
 - DRAFT 直接 Approve、核准金額超過申請金額、空白 Reject comment，以及已 APPROVED 後再次 Approve 均已確認被 Business Rule 阻擋。
-- 重複 Submit 已由 Business Rule 阻擋；Exception Handling 尚未完成，因此目前回傳 500。
-- Stage 4 Business Rule 錯誤目前亦可能回傳 HTTP 500，正式 Exception Handling 留待後續 Stage。
+- 重複 Submit 已由 Business Rule 阻擋；Stage 7 全域錯誤處理會回傳 409 Conflict。
+- Stage 4 原有的 Business Rule 錯誤已於 Stage 7 納入一致的 400／404／409 error contract。
 - Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證登入、JWT、未登入／無效 token、RBAC 與 Maker-Checker。
-- Stage 6 已人工驗證 RM 正常建立 Drawdown（201）、超額與 amount = 0（400），以及 REVIEWER 權限阻擋（403）。
+- Stage 6 已人工驗證 RM 正常建立 Drawdown（201）、amount = 0（400）、超額（409 Conflict），以及 REVIEWER 權限阻擋（403）。
 - `DrawdownServiceTest` 的 CreditLimit 不存在、null／0／負數／超額金額共 5 個測試皆通過。
 - Maven `test` Lifecycle 驗證。
 - Maven `package` Lifecycle 驗證。
+- Stage 7 automated tests 共 29 個，涵蓋全域錯誤格式、Audit action／transaction boundary、CreditApplication filtering／pagination，以及 Drawdown business conflict。
+- Stage 7 Manual Test 已驗證 pagination、filtering、sorting、400／404／409、Approve／Reject／Drawdown Audit Trail、失敗 action 不產生成功 Audit，以及超額 Drawdown 後 availableAmount 不變。
+- `git diff --check` PASS。
 
 尚未完成：
 
@@ -189,8 +201,8 @@ Stage 5 已完成基本 Security Boundary：
 
 - Stage 5：Security／JWT／RBAC／Maker-Checker（Completed：2026-09-07）
 - Stage 6：Drawdown／Transaction（Completed：2026-09-08）
-- Stage 7：Audit／Exception／Filtering／Pagination（Next）
-- Stage 8：Automated Tests／CI
+- Stage 7：Audit／Exception／Filtering／Pagination（Completed：2026-09-09）
+- Stage 8：Automated Tests／CI（Next）
 - Stage 9：Documentation／Final Verification
 - Stage 10（Optional）：Docker／Docker Compose／One-command Startup
 - Stage 11（Optional）：Public Deployment；不得排擠 Business Logic、Security、Testing 等核心工作

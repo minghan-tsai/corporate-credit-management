@@ -1,0 +1,9 @@
+package com.minghan.credit.entity;
+
+public enum AuditAction {
+    CREATE_CREDIT_APPLICATION,
+    SUBMIT_CREDIT_APPLICATION,
+    APPROVE_CREDIT_APPLICATION,
+    REJECT_CREDIT_APPLICATION,
+    CREATE_DRAWDOWN
+}
