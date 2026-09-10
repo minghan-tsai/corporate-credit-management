@@ -9,6 +9,7 @@
 - **Transaction**：審核、額度、Drawdown 與 AuditLog 在同一交易內處理。
 - **`PESSIMISTIC_WRITE`**：鎖定 CreditLimit，避免並行超額動用。
 - **AuditLog**：記錄申請建立、Submit、Approve、Reject 與 Drawdown。
+- **OpenAPI／Swagger UI**：提供 API 文件與 JWT Authorize 操作介面。
 - **62 tests + GitHub Actions CI**：自動測試核心規則、權限與錯誤處理。
 
 ## Core Workflow
@@ -36,10 +37,16 @@
 - Spring Web／Validation、Spring Data JPA／Hibernate
 - PostgreSQL、Flyway
 - Spring Security、BCrypt、JWT（JJWT）
+- springdoc-openapi、Swagger UI
 - JUnit 5、Mockito、Spring Security Test
 - GitHub Actions
 
 ## API
+
+OpenAPI／Swagger UI 已完成：
+
+- Swagger UI：`http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON：`http://localhost:8080/v3/api-docs`
 
 | Method | Endpoint | 權限 | 說明 |
 | --- | --- | --- | --- |
@@ -106,7 +113,7 @@ $env:JWT_SECRET = "your-base64-encoded-secret"
 
 啟動後可用 `GET http://localhost:8080/api/health` 檢查服務。
 
-### manual-test profile 與 JWT
+### Demo Credentials 與 Swagger JWT
 
 `manual-test` profile 會在帳號不存在時建立以下本機帳號：
 
@@ -115,7 +122,13 @@ $env:JWT_SECRET = "your-base64-encoded-secret"
 | `stage5_rm` | `RmPass123!` | RM |
 | `stage5_reviewer` | `ReviewerPass123!` | REVIEWER |
 
-測試帳號僅供本機使用。呼叫 `POST /api/auth/login` 取得 `token` 後，將它放入受保護 request：
+測試帳號僅供本機使用。在 Swagger UI 呼叫受保護 API：
+
+1. 呼叫 `POST /api/auth/login` 取得 JWT。
+2. 點選 **Authorize**，輸入 response 中的 `token`。
+3. 呼叫符合帳號 Role 的受保護 API。
+
+使用 REST Client 時則加入：
 
 ```http
 Authorization: Bearer <token>

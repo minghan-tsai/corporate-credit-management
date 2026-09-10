@@ -3,6 +3,7 @@ package com.minghan.credit.controller;
 import com.minghan.credit.dto.LoginRequest;
 import com.minghan.credit.dto.LoginResponse;
 import com.minghan.credit.service.JwtService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Authentication")
 public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;

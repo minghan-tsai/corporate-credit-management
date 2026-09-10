@@ -1,8 +1,11 @@
 package com.minghan.credit.controller;
 
+import com.minghan.credit.config.OpenApiConfig;
 import com.minghan.credit.dto.CreateDrawdownRequest;
 import com.minghan.credit.dto.DrawdownResponse;
 import com.minghan.credit.service.DrawdownService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/credit-limits/{creditLimitId}/drawdowns")
+@Tag(name = "Drawdowns")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class DrawdownController {
 
     private final DrawdownService drawdownService;

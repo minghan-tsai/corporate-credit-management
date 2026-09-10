@@ -10,7 +10,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **已自動化驗證**：已有 automated test 或 CI 證據。
 - **已手動驗證**：已有 REST Client／PostgreSQL 實際驗證證據。
 - **Planned**：V1 原始規劃中尚未實作的項目。
-- **Optional**：不屬於 Stage 0～9 核心交付的加分項。
+- **Optional**：不屬於 Stage 0～10 核心交付的加分項。
 
 - Artifact／資料夾：`corporate-credit-management`
 - Base package：`com.minghan.credit`
@@ -46,7 +46,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **Role** — RM、REVIEWER、ADMIN 等系統角色。
 - **AuditLog** — 業務操作 Audit 紀錄。
 
-目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit、Drawdown，以及 AppUser／Role、Authentication、JWT、RBAC、Maker-Checker 與 AuditLog；Stage 7 另完成全域錯誤處理及 CreditApplication 查詢分頁，Stage 9 已補齊建立申請時的 `requestedAmount` 驗證。Company API 的正式 RBAC 與 AuditLog 查詢 API 尚未實作。
+目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit、Drawdown，以及 AppUser／Role、Authentication、JWT、RBAC、Maker-Checker 與 AuditLog；Stage 7 另完成全域錯誤處理及 CreditApplication 查詢分頁，Stage 9 已補齊建立申請時的 `requestedAmount` 驗證，Stage 10 已加入 OpenAPI／Swagger UI。Company API 的正式 RBAC 與 AuditLog 查詢 API 尚未實作。
 
 ### Out of Scope
 
@@ -261,12 +261,13 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 - Spring Security
 - JJWT
 - Spring Validation
+- springdoc-openapi／Swagger UI
 - PostgreSQL JDBC Driver
 - Flyway Core 與 Flyway PostgreSQL Support
 - Spring Boot Test Dependency
 - Spring Security Test Dependency
 
-JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI。OpenAPI／Swagger 仍為後續規劃。Docker Compose 保留至 Optional Stage 10。Testcontainers 為尚未實作的高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
+JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI；Stage 10 已完成 springdoc-openapi、Swagger UI 與 JWT Bearer authorization。Docker／Deployment 保留至 Optional Stage 11。Testcontainers 為尚未實作的高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
 
 Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
@@ -338,6 +339,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - Drawdown 建立僅允許 RM；REVIEWER 呼叫時回傳 403，建立者由 JWT SecurityContext 取得。
 - Service 以 `CreditApplication.createdBy` 比對目前登入者，禁止 maker Approve／Reject 自己的案件。
 - `manual-test` profile 使用 CommandLineRunner 初始化 BCrypt 測試帳號，不以測試 seed 污染 Flyway migration history。
+- Swagger UI 與 OpenAPI JSON 路徑已設為 `permitAll`；既有 Business API Security 與 `@PreAuthorize` 規則維持不變。
 
 ## 11. Testing Strategy
 
@@ -365,6 +367,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - `mvnw package` 為 `BUILD SUCCESS`，`git diff --check` PASS。
 - Stage 9 Manual Final Verification 已完成 22 項 REST 驗證：Health／Company／Login、anonymous 與 invalid JWT 401、`requestedAmount` 400、CreditApplication Create／Submit／Approve／Reject、RBAC 403、Business Conflict 409、Filtering／Pagination／Sorting，以及 Drawdown 201／400／403／409 均符合目前 API contract。
 - Stage 9 PostgreSQL 驗證已確認 Application 16 正確建立 CREATE／SUBMIT／APPROVE AuditLog、Application 17 正確建立 CREATE／SUBMIT／REJECT AuditLog，CreditLimit 5 由 3,000,000 成功扣減為 2,900,000，Drawdown 3 正確建立，且後續失敗操作不會再次扣減額度或新增成功 AuditLog。上述 ID 僅為本次驗證紀錄，不作為永久測試資料依賴。
+- Stage 10 已人工驗證 Swagger UI、OpenAPI JSON、JWT Bearer authorization 與主要 API 顯示；CreditApplication 查詢的 `sort` 已呈現為單一 query string，`createdAt,desc` 與省略 sort 均可正常呼叫。
 
 ### Unit Test
 
@@ -416,8 +419,7 @@ Testcontainers 是高優先加分項，但若時程壓力需要可省略。本�
 - CI Platform：GitHub Actions。
 - `.github/workflows/ci.yml` 已設定 push／pull request trigger、Ubuntu、JDK 21、Maven dependency cache，以及 `./mvnw test`／`./mvnw package`。
 - CI workflow implementation 已完成；Stage 8 remote CI 已成功執行 `test` 與 `package`。
-- Docker／Docker Compose one-command startup 保留至 Optional Stage 10。
-- Public Deployment 保留至 Optional Stage 11。
+- Docker／Docker Compose 與 Public Deployment 保留至 Optional Stage 11。
 
 Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 或 Testing。
 
@@ -435,23 +437,27 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 7 | Audit／Exception／Filtering／Pagination | Completed | 2026-09-09 |
 | Stage 8 | Automated Tests／CI | Completed；Local／Remote CI Verified | 2026-09-10 |
 | Stage 9 | Documentation／Final Verification | Completed | 2026-09-10 |
-| Stage 10 | Docker／Docker Compose／One-command Startup | Optional | - |
-| Stage 11 | Public Deployment | Optional | - |
+| Stage 10 | OpenAPI／Swagger UI | Completed | 2026-09-10 |
+| Stage 11 | Docker／Docker Compose／Public Deployment | Optional | - |
 
-Stage 0～9 為核心必做；Stage 10～11 為 Optional，不得排擠 Business Logic、Security、Testing 等核心工作。
+Stage 0～10 已完成；Stage 11 為 Optional，不得排擠 Business Logic、Security、Testing 等核心工作。
 
-### Stage 10 — Docker／Docker Compose／One-command Startup（Optional）
+### Stage 10 — OpenAPI／Swagger UI（Completed）
 
-- 建立 Spring Boot Dockerfile。
-- 使用 Docker Compose 啟動 Spring Boot 與 PostgreSQL。
-- 以 Environment Variables 提供資料庫連線與必要設定。
-- 啟動時由 Flyway 執行版本化 Migration。
-- README 提供一鍵啟動與必要環境設定說明。
+- 加入 `springdoc-openapi-starter-webmvc-ui`。
+- 新增 OpenAPI config，設定 API 基本資訊與 JWT Bearer security scheme。
+- 提供 Swagger UI 與 `/v3/api-docs` OpenAPI JSON。
+- SecurityConfig 僅放行 Swagger UI／OpenAPI 必要路徑，既有 Business API Security 不變。
+- 主要 Controller 加入 `@Tag`，受保護 Controller 加入 `@SecurityRequirement`。
+- 修正 CreditApplication 查詢的 `sort` 文件，Swagger UI 以 `createdAt,desc` 或 `id,desc` query string 操作。
+- 已人工驗證 Swagger UI 顯示、JWT Authorize、受保護 API 與 sorting，結果 PASS。
 
-### Stage 11 — Public Deployment（Optional）
+### Stage 11 — Docker／Deployment（Optional）
 
+- 規劃 Spring Boot Dockerfile 與 Docker Compose one-command startup。
+- 以 Environment Variables 提供資料庫連線與必要設定，啟動時由 Flyway 執行 Migration。
 - 將完成的核心系統部署至 Public Environment。
-- 僅在 Stage 0～9 核心工作穩定完成後進行。
+- 僅在 Stage 0～10 核心工作穩定完成後進行。
 - 不得排擠 Business Logic、Security、Testing 或資料一致性工作。
 
 ### Original Schedule
@@ -470,15 +476,15 @@ Stage 0～9 為核心必做；Stage 10～11 為 Optional，不得排擠 Business
 - Stage 8：原訂 9/6–9/7
 - Stage 9：原訂 9/8–9/10
 
-Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交付期限。
+Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Docker／Deployment 為 Optional，不設定核心交付期限。
 
 2026-09-08 後不得新增大型功能。
 
 ## 14. Current Status
 
-**Current Status：Stage 0～9 核心開發與驗證已完成**
+**Current Status：Stage 0～10 核心開發與驗證已完成**
 
-**後續項目：Stage 10 Docker／Docker Compose、Stage 11 Public Deployment 均為 Optional**
+**Next Stage：Stage 11 Docker／Docker Compose／Deployment（Optional）**
 
 - AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
 - BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
@@ -498,6 +504,7 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 - Stage 7 Manual Test 已驗證查詢、錯誤 response、Audit Trail、失敗 action 不留成功 Audit，以及超額 Drawdown rollback 行為。
 - Stage 9 Manual Final Verification 的 22 項 REST 結果均符合預期；PostgreSQL 已確認 Application 16／17、CreditLimit 5、Drawdown 3 的狀態、金額與 AuditLog，失敗操作沒有額外扣減或成功 Audit。
 - Stage 8 implementation／local／remote CI verification 與 Stage 9 documentation／manual final verification 均已於 2026-09-10 完成。
+- Stage 10 已完成 springdoc-openapi、Swagger UI、OpenAPI config、JWT Bearer authorization、Swagger Security permit paths、Controller 文件標註與 `sort` 參數修正，並通過人工驗證。
 
 ## 15. Definition of Done
 
@@ -523,7 +530,7 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 8. 驗證 CI
 9. 必要時建立 Tag
 
-Stage Tags 為 `v1-stage-0` 至 `v1-stage-9`。最終 Release Tag 為 `v1.0.0`。
+Stage Tags 為 `v1-stage-0` 至 `v1-stage-10`。最終 Release Tag 為 `v1.0.0`。
 
 ## 16. AI／Codex Collaboration Rules
 

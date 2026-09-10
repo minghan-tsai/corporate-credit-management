@@ -1,5 +1,11 @@
 package com.minghan.credit.controller;
 
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.PageRequest;
@@ -20,12 +26,15 @@ import com.minghan.credit.dto.CreateCreditApplicationRequest;
 import com.minghan.credit.dto.CreditApplicationPageResponse;
 import com.minghan.credit.dto.CreditApplicationResponse;
 import com.minghan.credit.dto.RejectCreditApplicationRequest;
+import com.minghan.credit.config.OpenApiConfig;
 import com.minghan.credit.entity.CreditApplicationStatus;
 import com.minghan.credit.exception.InvalidRequestException;
 import com.minghan.credit.service.CreditApplicationService;
 
 @RestController
 @RequestMapping("/api/credit-applications")
+@Tag(name = "Credit Applications")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class CreditApplicationController {
 
     private static final int MAX_PAGE_SIZE = 100;
@@ -55,10 +64,17 @@ public class CreditApplicationController {
     }
 
     @GetMapping
+    @Operation(parameters = @Parameter(
+            name = "sort",
+            in = ParameterIn.QUERY,
+            description = "Sort format: property,direction",
+            example = "createdAt,desc",
+            schema = @Schema(type = "string", defaultValue = "id,desc")))
     public CreditApplicationPageResponse findAll(
             @RequestParam(required = false) CreditApplicationStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @Parameter(hidden = true)
             @SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
         validatePagination(page, size);
         return creditApplicationService.findAll(
