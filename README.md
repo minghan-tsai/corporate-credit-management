@@ -1,203 +1,45 @@
 # Corporate Credit Management System
 
-以 Java 21 與 Spring Boot 開發的企業授信管理 Backend Portfolio Project，模擬銀行內部從企業建檔、授信申請、獨立審核、建立額度到 Drawdown 的核心流程。
+這是一個以 Java 21、Spring Boot 與 PostgreSQL 建置的企業授信管理後端，模擬公司建檔、授信申請、獨立審核、額度建立與動用流程。
 
-本專案刻意採用「小而深」的範圍，重點放在可說明的 Business Rules、Transaction 一致性、JWT／RBAC、Maker-Checker、`PESSIMISTIC_WRITE` 悲觀鎖與額度一致性控制，以及 Audit Trail，而不是重現完整 Core Banking System。
+## Project Highlights
 
-## 核心流程
+- **Maker-Checker**：申請建立者不能審核自己的案件。
+- **JWT／RBAC**：依 RM、REVIEWER Role 控制 API 權限。
+- **Transaction**：審核、額度、Drawdown 與 AuditLog 在同一交易內處理。
+- **`PESSIMISTIC_WRITE`**：鎖定 CreditLimit，避免並行超額動用。
+- **AuditLog**：記錄申請建立、Submit、Approve、Reject 與 Drawdown。
+- **62 tests + GitHub Actions CI**：自動測試核心規則、權限與錯誤處理。
+
+## Core Workflow
 
 `Company → CreditApplication → Submit → Approve / Reject → CreditLimit → Drawdown`
 
-合法的授信申請狀態轉換：
+合法狀態轉換：
 
 - `DRAFT → SUBMITTED → APPROVED`
 - `DRAFT → SUBMITTED → REJECTED`
 
-## 目前進度
+## Business Rules
 
-| Stage | 範圍 | 狀態 |
-| --- | --- | --- |
-| Stage 0～7 | 專案骨架、授信流程、Security、Drawdown、Audit、Exception、Pagination | Completed |
-| Stage 8 | Automated Tests／CI | Completed；Local 與 GitHub Actions 均已驗證 |
-| Stage 9 | Documentation／Final Verification | Completed |
-| Stage 10 | Docker／Docker Compose | Optional |
-| Stage 11 | Public Deployment | Optional |
+- Company 提供建立與查詢；`name` 不可空白，8 碼 `taxId` 必須唯一。
+- RM 可以建立與 Submit CreditApplication；新案件為 `DRAFT`，`requestedAmount` 必須大於 0。
+- 申請流程只允許 `DRAFT → SUBMITTED`，再由 `SUBMITTED → APPROVED／REJECTED`。
+- 審核由 REVIEWER 執行，Maker-Checker 規則禁止經辦人審核自己的案件。
+- `approvedAmount` 不得超過 `requestedAmount`，Approve 後建立 CreditLimit，初始可用額度等於核准額度；Reject 必須填寫原因。
+- Drawdown 金額必須大於 0，且不得超過 `availableAmount`。
+- Approve、Reject 與 Drawdown 都在 Transaction 中執行；Drawdown 另以 `PESSIMISTIC_WRITE` 鎖定額度。
 
-Stage 8 的 59 tests 已在本機及 GitHub Actions 通過。Stage 9 已加入 `requestedAmount` 建立驗證的 automated tests，目前完整測試數為 62；本機 `mvnw test` 與 `mvnw package` 均為 `BUILD SUCCESS`。
+## Tech Stack
 
-Stage 9 Manual Final Verification 已完成：Health、Company、RM／REVIEWER Login、401／403 Security Boundary、`requestedAmount` 400、CreditApplication Create／Submit／Approve／Reject、409 Business Conflict、Filtering／Pagination／Sorting，以及 Drawdown 201／400／403／409 均符合目前 API contract。PostgreSQL 亦已確認 Approve／Reject／CreditLimit／Drawdown 寫入結果、`availableAmount` 由 3,000,000 正確扣減為 2,900,000，且失敗操作不會再次扣減額度或留下成功 AuditLog。
-
-## 已實作功能與規則
-
-### Company
-
-- 建立公司、查詢單一公司、查詢全部公司。
-- `name` 不可為空白。
-- `taxId` 不可為空白、長度必須為 8，並由 Database UNIQUE constraint 保證唯一。
-- **V1 limitation：Company API 目前為 public，尚未套用正式 RBAC。**
-
-### CreditApplication
-
-- 只有 RM 可以建立與 Submit 授信申請。
-- 建立者由 JWT SecurityContext 取得並保存為 `createdBy`。
-- 新申請初始狀態固定為 `DRAFT`。
-- `requestedAmount` 不可為 null，且必須大於 0。
-- 只有 `DRAFT` 可以 Submit；重複 Submit 回傳 409 Conflict。
-- 查詢 API 支援 status filtering、database pagination 與 Spring Data sorting。
-- Pagination 預設為 `page=0`、`size=20`、`sort=id,desc`，最大 `size` 為 100。
-
-### CreditReview／CreditLimit
-
-- 只有 REVIEWER 可以 Approve 或 Reject。
-- Maker-Checker 在 Service 層禁止建立者審核自己的案件。
-- 只有 `SUBMITTED` 可以 Approve 或 Reject。
-- V1 service flow 僅允許一次完成審核。
-- `approvedAmount` 不可為 null、必須大於 0，且不得超過 `requestedAmount`。
-- Reject comment 不可為 null 或空白。
-- Approve 建立 CreditReview 與唯一 CreditLimit；Reject 只建立 CreditReview。
-- CreditLimit 建立時 `availableAmount = limitAmount`。
-- Approve／Reject 使用 `@Transactional`，狀態、Review、Limit 與 Audit 必須一起 commit／rollback。
-
-### Drawdown
-
-- 只有 RM 可以建立 Drawdown，建立者由 JWT SecurityContext 取得。
-- Amount 不可為 null、0 或負數。
-- Amount 不得超過 `availableAmount`；等於可用額度時允許動用並歸零。
-- 使用 `PESSIMISTIC_WRITE` 鎖定 CreditLimit，避免同一額度並行超額動用。
-- Drawdown、`availableAmount` 扣減與 Audit 共用同一 Transaction。
-
-### Audit 與錯誤處理
-
-- AuditLog 記錄 actor username、action、entity type／ID 與時間。
-- 已記錄五項 action：建立申請、Submit、Approve、Reject、建立 Drawdown。
-- `AuditLogService.record()` 使用 `Propagation.MANDATORY` 加入既有 business transaction。
-- **AuditLog 目前只有寫入，尚未提供查詢 API。**
-- `ApiErrorResponse` 統一處理常見 400／404／409 錯誤，並安全處理未預期的 500 response。
-- Authentication 與 Authorization 分別使用 401／403。
-
-## 技術棧
-
-- Java 21
-- Spring Boot 3.5.16
-- Maven Wrapper
-- Spring Web／Validation
-- Spring Data JPA／Hibernate
-- PostgreSQL
-- Flyway
-- Spring Security／BCrypt／JWT（JJWT）
-- JUnit 5／Mockito／Spring Security Test
+- Java 21、Spring Boot 3.5.16、Maven Wrapper
+- Spring Web／Validation、Spring Data JPA／Hibernate
+- PostgreSQL、Flyway
+- Spring Security、BCrypt、JWT（JJWT）
+- JUnit 5、Mockito、Spring Security Test
 - GitHub Actions
 
-## Prerequisites
-
-開始前需準備：
-
-- JDK 21
-- PostgreSQL
-- 可使用 PowerShell、Command Prompt 或支援 shell script 的終端機
-- 不需要另外安裝 Maven；專案已包含 Maven Wrapper
-- 若要執行 `api-test.http`，建議安裝 VS Code REST Client extension
-
-## PostgreSQL 基本設定
-
-預設連線設定：
-
-- Host：`localhost`
-- Port：`5432`
-- Database：`corporate_credit_management`
-- Username：預設 `postgres`，可由 `DB_USERNAME` 覆寫
-- Password：必須由 `DB_PASSWORD` 提供
-
-先建立 database：
-
-```sql
-CREATE DATABASE corporate_credit_management;
-```
-
-應用程式啟動時會由 Flyway 依序執行 V1～V7 migration；Hibernate 使用 `ddl-auto=validate`，不會自行建立正式 schema。
-
-## Environment Variables
-
-| 變數 | 必要性 | 說明 |
-| --- | --- | --- |
-| `DB_PASSWORD` | 必要 | PostgreSQL password |
-| `DB_USERNAME` | 選填 | 預設為 `postgres` |
-| `SPRING_DATASOURCE_URL` | 選填 | 覆寫預設 PostgreSQL URL |
-| `JWT_SECRET` | Production 必要 | Base64 編碼的 JWT signing key；未設定時只會使用 local development default |
-| `JWT_EXPIRATION_MS` | 選填 | JWT 有效時間，預設 `3600000` ms |
-
-PowerShell 範例：
-
-```powershell
-$env:DB_USERNAME = "postgres"
-$env:DB_PASSWORD = "your-local-password"
-$env:JWT_SECRET = "your-base64-encoded-secret"
-```
-
-Repository 內的 JWT default 只供本機開發，不得用於 production。
-
-## 啟動方式
-
-Windows PowerShell／Command Prompt：
-
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
-macOS／Linux：
-
-```bash
-./mvnw spring-boot:run
-```
-
-服務啟動後可先確認：
-
-```http
-GET http://localhost:8080/api/health
-```
-
-預期 response 為 `OK`。
-
-## manual-test profile 與測試帳號
-
-一般啟動不會自動建立使用者。人工驗證 Login、RBAC 與完整授信流程時，可使用 `manual-test` profile：
-
-```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=manual-test"
-```
-
-此 profile 會在帳號不存在時建立以下本機測試帳號：
-
-| Username | Password | Role |
-| --- | --- | --- |
-| `stage5_rm` | `RmPass123!` | RM |
-| `stage5_reviewer` | `ReviewerPass123!` | REVIEWER |
-
-這些帳號只供本機人工測試，不應用於 production。完整 current workflow 請參考 `api-test.http`。
-
-## Login 與 JWT 使用方式
-
-先登入：
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "stage5_rm",
-  "password": "RmPass123!"
-}
-```
-
-成功後 response 會包含 `token`。呼叫受保護 API 時加入：
-
-```http
-Authorization: Bearer <token>
-```
-
-未登入或無效 JWT 回傳 401；已登入但 Role 不符回傳 403。
-
-## API 一覽
+## API
 
 | Method | Endpoint | 權限 | 說明 |
 | --- | --- | --- | --- |
@@ -213,36 +55,95 @@ Authorization: Bearer <token>
 | `POST` | `/api/credit-applications/{id}/reject` | REVIEWER | Reject SUBMITTED 申請 |
 | `POST` | `/api/credit-limits/{creditLimitId}/drawdowns` | RM | 建立 Drawdown |
 
-## 測試與 Packaging
+## Run Locally
 
-Windows：
+### 環境與資料庫
+
+- JDK 21
+- PostgreSQL
+- Maven Wrapper 已包含在 Repository 中。
+
+預設連線為 `localhost:5432/corporate_credit_management`，請先建立 database：
+
+```sql
+CREATE DATABASE corporate_credit_management;
+```
+
+啟動時由 Flyway 套用 migration，Hibernate 使用 `ddl-auto=validate`。
+
+### Environment Variables
+
+| 變數 | 必要性 | 說明 |
+| --- | --- | --- |
+| `DB_PASSWORD` | 必要 | PostgreSQL password |
+| `DB_USERNAME` | 選填 | 預設 `postgres` |
+| `SPRING_DATASOURCE_URL` | 選填 | 覆寫預設 PostgreSQL URL |
+| `JWT_SECRET` | Production 必要 | Base64 JWT signing key；預設值僅供本機開發 |
+| `JWT_EXPIRATION_MS` | 選填 | JWT 有效時間，預設 `3600000` ms |
+
+PowerShell 範例：
+
+```powershell
+$env:DB_USERNAME = "postgres"
+$env:DB_PASSWORD = "your-local-password"
+$env:JWT_SECRET = "your-base64-encoded-secret"
+```
+
+### 啟動
+
+```powershell
+# Windows
+.\mvnw.cmd spring-boot:run
+
+# Windows：啟用本機人工測試帳號
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=manual-test"
+```
+
+```bash
+# macOS／Linux
+./mvnw spring-boot:run
+```
+
+啟動後可用 `GET http://localhost:8080/api/health` 檢查服務。
+
+### manual-test profile 與 JWT
+
+`manual-test` profile 會在帳號不存在時建立以下本機帳號：
+
+| Username | Password | Role |
+| --- | --- | --- |
+| `stage5_rm` | `RmPass123!` | RM |
+| `stage5_reviewer` | `ReviewerPass123!` | REVIEWER |
+
+測試帳號僅供本機使用。呼叫 `POST /api/auth/login` 取得 `token` 後，將它放入受保護 request：
+
+```http
+Authorization: Bearer <token>
+```
+
+完整 request 流程可參考 `api-test.http`。
+
+## Testing
 
 ```powershell
 .\mvnw.cmd test
 .\mvnw.cmd package
 ```
 
-macOS／Linux：
+- 目前共有 62 個 automated tests，全部通過。
+- GitHub Actions 會在 push／pull request 時自動執行 test 與 package。
+- 另外用 REST Client 跑過完整授信流程，包含登入、權限、Approve／Reject、Drawdown 與錯誤情境。
+- PostgreSQL 端也有確認資料寫入、額度扣減與 AuditLog。
 
-```bash
-./mvnw test
-./mvnw package
-```
+## Known Limitations
 
-目前 62 個 automated tests 主要涵蓋 Service Business Rules、State Transition、Audit、Exception contract、Pagination 與 Security RBAC；執行結果為 0 failures／0 errors／0 skipped。`mvnw package` 已成功產生可執行 JAR。GitHub Actions 會在 push／pull request 執行 `test` 與 `package`，Stage 8 remote CI 已完成並通過。
+- V1 的 Company API 仍是 public，尚未套用 RBAC。
+- AuditLog 目前只負責寫入，還沒有查詢 API。
+- V1 聚焦核心授信流程，部分查詢與管理 API 尚未補齊；CreditReview service flow 也只允許一次審核。
+- 測試目前以 Unit／Security／Manual flow 為主，尚未加入 Testcontainers、真實 PostgreSQL rollback／concurrency，以及 invalid／expired JWT automated integration tests。
+- `created_by` 仍保留 legacy null 相容性。
+- Docker、Docker Compose 與 Deployment 尚未實作。
 
-## 目前已知限制
+## Project Documentation
 
-- Company API 目前仍為 public，尚未套用正式 RBAC。
-- AuditLog 只有寫入，沒有查詢 API。
-- 尚未提供 CreditReview、CreditLimit 或 Drawdown 的 read API。
-- 尚未提供修改 DRAFT CreditApplication、User／Role 管理 API。
-- CreditReview Entity／Schema 支援 `1:N`，但 V1 service flow 僅允許一次完成審核。
-- Automated tests 尚未包含 Testcontainers、真實 PostgreSQL rollback 或 concurrency integration tests。
-- Invalid／expired JWT 的自動化整合測試尚未實作；Stage 9 已由人工 REST Client workflow 確認 invalid JWT 回傳 401。
-- `credit_applications.created_by` 在目前 migration schema 仍允許 legacy null；這一批 Stage 9 不調整既有 migration。
-- Docker、Docker Compose 與 Public Deployment 為 Optional roadmap，尚未實作。
-
-## 專案文件
-
-工程計畫、Domain Model、Business Rules、驗證範圍與後續 Optional roadmap 請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+詳細工程計畫與實作紀錄請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
