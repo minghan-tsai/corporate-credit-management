@@ -1,8 +1,16 @@
-# Corporate Credit Management System — Project Plan
+# Corporate Credit Management System — 工程計畫與目前實作紀錄
 
 ## 1. Project Positioning
 
 Corporate Credit Management System 是一個以作品集為導向的 Java／Spring Boot Backend，刻意以「小而深」的範圍模擬銀行內部企業授信系統。專案聚焦於企業客戶建檔、授信申請、獨立審核、建立核准額度，以及 Drawdown 的完整生命週期。本專案並非完整的 Core Banking System。
+
+本文件同時保存工程計畫與目前實作紀錄。為避免把 roadmap 誤認為已交付功能，狀態統一使用以下語意：
+
+- **已實作**：目前 production code／schema 已存在。
+- **已自動化驗證**：已有 automated test 或 CI 證據。
+- **已手動驗證**：已有 REST Client／PostgreSQL 實際驗證證據。
+- **Planned**：V1 原始規劃中尚未實作的項目。
+- **Optional**：不屬於 Stage 0～9 核心交付的加分項。
 
 - Artifact／資料夾：`corporate-credit-management`
 - Base package：`com.minghan.credit`
@@ -38,7 +46,7 @@ Corporate Credit Management System 是一個以作品集為導向的 Java／Spri
 - **Role** — RM、REVIEWER、ADMIN 等系統角色。
 - **AuditLog** — 業務操作 Audit 紀錄。
 
-目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit、Drawdown，以及 AppUser／Role、Authentication、JWT、RBAC、Maker-Checker 與 AuditLog；Stage 7 另完成全域錯誤處理及 CreditApplication 查詢分頁。
+目前已完成 Company、CreditApplication 建立與 Submit、CreditReview、Approve／Reject、CreditLimit、Drawdown，以及 AppUser／Role、Authentication、JWT、RBAC、Maker-Checker 與 AuditLog；Stage 7 另完成全域錯誤處理及 CreditApplication 查詢分頁，Stage 9 已補齊建立申請時的 `requestedAmount` 驗證。Company API 的正式 RBAC 與 AuditLog 查詢 API 尚未實作。
 
 ### Out of Scope
 
@@ -64,7 +72,7 @@ V1 不包含：
 
 ### RM
 
-規劃權限：
+目標權限；目前 Company API 仍為 public，其餘狀態依 API Map：
 
 - 建立企業客戶。
 - 建立授信申請。
@@ -117,16 +125,16 @@ ADMIN 不是金融業務的 super user，不應自動取得不受限制的申請
 - CreditApplication `1:0..1` CreditLimit
 - CreditLimit `1:N` Drawdown
 
-目前 Company `1:N` CreditApplication、AppUser `1:N` CreditApplication、CreditApplication `1:N` CreditReview、CreditApplication `1:0..1` CreditLimit，以及 CreditLimit `1:N` Drawdown 均已完成。Drawdown 對 CreditLimit 與 AppUser（`createdBy`）皆使用 LAZY `@ManyToOne`。
+目前 Company `1:N` CreditApplication、AppUser `1:N` CreditApplication、CreditApplication `1:N` CreditReview、CreditApplication `1:0..1` CreditLimit，以及 CreditLimit `1:N` Drawdown 均已實作。CreditReview 的 Entity／Schema 關係為 `1:N`，但 V1 service flow 以重複 Review 檢查限制每筆申請只能完成一次審核。Drawdown 對 CreditLimit 與 AppUser（`createdBy`）皆使用 LAZY `@ManyToOne`。
 
 User 參照：
 
 - `CreditApplication.createdBy`（已完成）
-- `CreditReview.reviewedBy`
+- `CreditReview.reviewedBy`（Planned；目前 reviewer 身分只保存於 AuditLog 的 actor username snapshot）
 - `Drawdown.createdBy`（已完成）
 - `AuditLog.actorUsername`（已完成；保存 SecurityContext username snapshot）
 
-其餘尚未實作 Domain 的 ownership、fetch、cascade、identifier、indexing、locking 與金額欄位設計，將在排定的 Stage 中進行決策與 Review，不預先假設。
+目前已完成 CreditApplication／Drawdown 的 `createdBy` ownership、主要關聯的 LAZY fetch、Database identifier、必要 Foreign Key／UNIQUE constraint／index、Drawdown pessimistic locking，以及以 `NUMERIC(19, 2)`／`BigDecimal` 表示金額。未實作項目會在本文明確標示為 Planned 或 Optional。
 
 ## 5. Core Workflow
 
@@ -150,8 +158,8 @@ V1 刻意排除複雜的多階段簽核。
 
 ### CreditApplication
 
-- `requestedAmount` 必須大於零。
-- 只有 DRAFT 的授信申請可以修改。
+- 建立申請時 `requestedAmount` 不可為 null，且必須大於零；Stage 9 已由 Service 驗證並補上 automated tests。
+- 修改自己擁有且為 DRAFT 的授信申請仍為 Planned；目前沒有 update API。
 - 只有 DRAFT 的授信申請可以 Submit。
 - 只有 SUBMITTED 的授信申請可以 Approve 或 Reject。
 
@@ -164,13 +172,13 @@ V1 刻意排除複雜的多階段簽核。
 - `approvedAmount` 不得大於 `requestedAmount`。
 - Reject 必須填寫原因。
 
-Stage 4 已完成 `SUBMITTED` 狀態檢查、重複 Review 防護、`approvedAmount > 0`、`approvedAmount <= requestedAmount`，以及 Reject comment 不得為 null／blank；Stage 5 已完成 REVIEWER Authorization 與 Maker-Checker。
+Stage 4 已完成 `SUBMITTED` 狀態檢查、重複 Review 防護、`approvedAmount > 0`、`approvedAmount <= requestedAmount`，以及 Reject comment 不得為 null／blank；Stage 5 已完成 REVIEWER Authorization 與 Maker-Checker；Stage 9 已補齊建立申請時的 `requestedAmount` 驗證。
 
 ### CreditLimit
 
 - 只有 APPROVED 的 CreditApplication 才能建立 CreditLimit。
 - 一個 CreditApplication 最多只能有一個 CreditLimit。
-- `usedAmount` 不得大於 `approvedAmount`。
+- 每筆 Drawdown 不得超過目前 `availableAmount`；扣減後 `availableAmount` 不得小於零。
 
 Stage 4 已完成由 Approve 流程建立唯一 CreditLimit，並在建立時令 `availableAmount = limitAmount`；Stage 6 已完成 Drawdown 與 `availableAmount` 扣減規則。
 
@@ -264,13 +272,13 @@ Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Micro
 
 ### API Map
 
-目前已實作 Login、Company APIs、CreditApplication 的建立／Submit／Approve／Reject／分頁查詢，以及 Drawdown API；授信端點已套用 JWT 與 RBAC，審核另有 Maker-Checker。Audit write 已完成，AuditLog 查詢 API 仍為規劃層級。
+目前已實作 Login、public Company APIs、CreditApplication 的建立／Submit／Approve／Reject／分頁查詢，以及 Drawdown API；CreditApplication／Drawdown 端點已套用 JWT 與 RBAC，審核另有 Maker-Checker。Audit write 已完成，AuditLog 查詢 API 仍為 Planned。
 
 | 功能 | Method／Path | 主要 Role | 狀態 |
 | --- | --- | --- | --- |
 | Login | `POST /api/auth/login` | Anonymous | 已實作；成功簽發 JWT |
-| 建立 Company | `POST /api/companies` | RM | 已實作；正式 RBAC 未完成 |
-| 查詢 Company | `GET /api/companies`, `GET /api/companies/{id}` | 已授權的內部 User | 已實作；正式 RBAC 未完成 |
+| 建立 Company | `POST /api/companies` | Public（目前）／RM（目標） | 已實作；V1 目前為 public，正式 RBAC 未完成 |
+| 查詢 Company | `GET /api/companies`, `GET /api/companies/{id}` | Public（目前）／內部 User（目標） | 已實作；V1 目前為 public，正式 RBAC 未完成 |
 | 建立 CreditApplication | `POST /api/credit-applications` | RM | 已實作；初始狀態固定 `DRAFT`；自動記錄 `createdBy` |
 | 更新自己擁有的 DRAFT | `PUT /api/credit-applications/{id}` | RM | 規劃 |
 | Submit 授信申請 | `POST /api/credit-applications/{id}/submit` | RM | 已實作；僅允許 `DRAFT → SUBMITTED`；RBAC 已完成 |
@@ -325,6 +333,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - Login API 透過 AuthenticationManager 驗證帳密，成功後簽發以 username 為 subject 的 JWT。
 - JWT Secret 由外部設定提供；JWT Filter 驗證 signature 與 expiration，並建立 Spring SecurityContext。
 - Session 採 Stateless，`/api/auth/login` 維持 `permitAll`，授信流程需通過 Authentication。
+- Company API 目前明確維持 `permitAll`，屬於 V1 limitation，尚未套用目標 RM／內部 User RBAC。
 - Method-level Security 以 `@PreAuthorize` 限制 RM 建立／Submit、REVIEWER Approve／Reject；ADMIN 不自動取得授信流程權限。
 - Drawdown 建立僅允許 RM；REVIEWER 呼叫時回傳 403，建立者由 JWT SecurityContext 取得。
 - Service 以 `CreditApplication.createdBy` 比對目前登入者，禁止 maker Approve／Reject 自己的案件。
@@ -335,7 +344,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 ### Current Status
 
 - 已使用 JUnit 5／Mockito 驗證 CreditApplication、Drawdown 與 Audit 核心 Business Rules，並使用 Spring Security Test 驗證實際 Security Filter Chain 與 Method Security。
-- 本機 Maven `test` 共 59 tests，0 failures／0 errors／0 skipped，`BUILD SUCCESS`。
+- Stage 8 baseline 為 59 tests；Stage 9 加入 3 個 `requestedAmount` 參數化案例後，目前共 62 tests，0 failures／0 errors／0 skipped，`BUILD SUCCESS`。
 - VS Code REST Client 人工 Company API 驗證已完成。
 - VS Code REST Client 已人工驗證 CreditApplication 建立與 Submit 成功。
 - PostgreSQL 已人工確認 CreditApplication 資料寫入，以及 `DRAFT → SUBMITTED` 狀態轉換。
@@ -349,11 +358,13 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - `DrawdownServiceTest` 已驗證 CreditLimit 不存在、null／0／負數／超額金額，以及 amount 等於 availableAmount 時成功且剩餘額度為 0。
 - Stage 7 automated tests 共 29 個，涵蓋 Global Exception Handling、Audit、Transaction Boundary、CreditApplication filtering／pagination 與 Drawdown business conflict；`mvnw test` 為 0 failures／0 errors。
 - Stage 8 補強 CreditApplication Maker-Checker、Approve／Reject invalid status、invalid approvedAmount、duplicate Review／CreditLimit 與 invalid reject reason Unit Tests。
-- Stage 8 Security Tests 經實際 Security Filter Chain 與 `@PreAuthorize` 明確驗證 anonymous／invalid JWT 回傳 401、已登入但角色不足回傳 403，以及 RM／REVIEWER／ADMIN RBAC；測試曾發現 anonymous request 原本回傳 403，SecurityConfig 加入 AuthenticationEntryPoint 後修正為 401。
-- Stage 8 完成後累計 59 tests，本機執行 0 failures／0 errors／0 skipped。
-- GitHub Actions workflow 已設定 push／pull request、Ubuntu、JDK 21、Maven Wrapper、dependency cache、`test` 與 `package`；尚待 push 後進行 remote CI verification。
+- Stage 8 Security Tests 經實際 Security Filter Chain 與 `@PreAuthorize` 驗證 anonymous request 回傳 401、已登入但角色不足回傳 403，以及 RM／REVIEWER／ADMIN RBAC；測試曾發現 anonymous request 原本回傳 403，SecurityConfig 加入 AuthenticationEntryPoint 後修正為 401。Invalid／expired JWT 的 automated integration test 尚未實作。
+- Stage 8 完成時累計 59 tests；Stage 9 補上 `requestedAmount` null／0／負數案例後累計 62 tests。
+- GitHub Actions workflow 已設定 push／pull request、Ubuntu、JDK 21、Maven Wrapper、dependency cache、`test` 與 `package`；Stage 8 commit `8d355b9` 的 remote CI 已完成並通過。
 - Stage 7 Manual Test 已驗證 pagination、filtering、sorting、400／404／409、Approve／Reject／Drawdown Audit Trail、失敗 action 不產生成功 Audit，以及超額 Drawdown 後 availableAmount 不變。
 - `mvnw package` 為 `BUILD SUCCESS`，`git diff --check` PASS。
+- Stage 9 Manual Final Verification 已完成 22 項 REST 驗證：Health／Company／Login、anonymous 與 invalid JWT 401、`requestedAmount` 400、CreditApplication Create／Submit／Approve／Reject、RBAC 403、Business Conflict 409、Filtering／Pagination／Sorting，以及 Drawdown 201／400／403／409 均符合目前 API contract。
+- Stage 9 PostgreSQL 驗證已確認 Application 16 正確建立 CREATE／SUBMIT／APPROVE AuditLog、Application 17 正確建立 CREATE／SUBMIT／REJECT AuditLog，CreditLimit 5 由 3,000,000 成功扣減為 2,900,000，Drawdown 3 正確建立，且後續失敗操作不會再次扣減額度或新增成功 AuditLog。上述 ID 僅為本次驗證紀錄，不作為永久測試資料依賴。
 
 ### Unit Test
 
@@ -370,8 +381,10 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 Stage 8 已驗證：
 
 - 測試實際經過 Security Filter Chain 與 Method Security／`@PreAuthorize`。
-- 未登入或無效／過期 JWT 的受保護 API 回傳 401；已登入但角色不足回傳 403。
+- 未登入使用者呼叫受保護 API 回傳 401；已登入但角色不足回傳 403。
 - RM／REVIEWER／ADMIN 的 CreditApplication 與 Drawdown 基本 RBAC 規則。
+
+Invalid JWT 回傳 401 已納入 `api-test.http` 人工驗證流程；invalid／expired JWT 的 automated integration test 為尚未實作項目，不列為已驗證的 automated coverage。
 
 ### Transaction Test
 
@@ -402,7 +415,7 @@ Testcontainers 是高優先加分項，但若時程壓力需要可省略。本�
 - 核心交付：可執行 JAR、文件、測試與最終驗證。
 - CI Platform：GitHub Actions。
 - `.github/workflows/ci.yml` 已設定 push／pull request trigger、Ubuntu、JDK 21、Maven dependency cache，以及 `./mvnw test`／`./mvnw package`。
-- CI workflow implementation completed，尚待 push 後進行 remote verification。
+- CI workflow implementation 已完成；Stage 8 remote CI 已成功執行 `test` 與 `package`。
 - Docker／Docker Compose one-command startup 保留至 Optional Stage 10。
 - Public Deployment 保留至 Optional Stage 11。
 
@@ -420,8 +433,8 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed | 2026-09-07 |
 | Stage 6 | Drawdown／Transaction | Completed | 2026-09-08 |
 | Stage 7 | Audit／Exception／Filtering／Pagination | Completed | 2026-09-09 |
-| Stage 8 | Automated Tests／CI | Implementation／Local Verification Completed；Remote CI Pending | 2026-09-10 |
-| Stage 9 | Documentation／Final Verification | Next | - |
+| Stage 8 | Automated Tests／CI | Completed；Local／Remote CI Verified | 2026-09-10 |
+| Stage 9 | Documentation／Final Verification | Completed | 2026-09-10 |
 | Stage 10 | Docker／Docker Compose／One-command Startup | Optional | - |
 | Stage 11 | Public Deployment | Optional | - |
 
@@ -463,9 +476,9 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 
 ## 14. Current Status
 
-**Current Stage：Stage 8 Implementation／Local Verification Completed；Remote CI Pending**
+**Current Status：Stage 0～9 核心開發與驗證已完成**
 
-**Next Stage：Stage 9 — Documentation／Final Verification**
+**後續項目：Stage 10 Docker／Docker Compose、Stage 11 Public Deployment 均為 Optional**
 
 - AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
 - BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
@@ -479,11 +492,12 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 - Stage 7 已完成 `@RestControllerAdvice`／`@ExceptionHandler`、統一 `ApiErrorResponse`，以及 400／404／409 error mapping。
 - AuditLog 已以 enum action／entity type、SecurityContext actor 與 `Propagation.MANDATORY` 納入五項核心 business transactions。
 - CreditApplication list API 已完成 status filtering、DB pagination、sorting、page／size validation 與 Response DTO。
-- Stage 7 automated tests baseline 為 29 個；Stage 8 補強 CreditApplication Business Rules、Maker-Checker、Security RBAC 與 Drawdown 邊界後累計 59 tests。
-- Stage 8 本機 `mvnw test` 為 0 failures／0 errors／0 skipped，`BUILD SUCCESS`。
-- GitHub Actions CI workflow 已設定完成，remote CI verification 待 push 後執行；Testcontainers、DB integration tests 與 concurrency integration tests 尚未實作。
+- Stage 7 automated tests baseline 為 29 個；Stage 8 補強 CreditApplication Business Rules、Maker-Checker、Security RBAC 與 Drawdown 邊界後累計 59 tests；Stage 9 requestedAmount 驗證案例加入後累計 62 tests。
+- 目前本機 `mvnw test` 為 0 failures／0 errors／0 skipped，`BUILD SUCCESS`；Stage 8 GitHub Actions remote CI 亦已通過。
+- Testcontainers、DB integration tests、invalid／expired JWT automated integration test 與 concurrency integration tests 尚未實作。
 - Stage 7 Manual Test 已驗證查詢、錯誤 response、Audit Trail、失敗 action 不留成功 Audit，以及超額 Drawdown rollback 行為。
-- Stage 8 implementation／local verification 完成日為 2026-09-10；下一階段為 Stage 9：Documentation／Final Verification。
+- Stage 9 Manual Final Verification 的 22 項 REST 結果均符合預期；PostgreSQL 已確認 Application 16／17、CreditLimit 5、Drawdown 3 的狀態、金額與 AuditLog，失敗操作沒有額外扣減或成功 Audit。
+- Stage 8 implementation／local／remote CI verification 與 Stage 9 documentation／manual final verification 均已於 2026-09-10 完成。
 
 ## 15. Definition of Done
 

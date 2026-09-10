@@ -138,6 +138,29 @@ class CreditApplicationServiceTest {
                 APPLICATION_ID);
     }
 
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"0", "-0.01"})
+    void givenRequestedAmountIsNullZeroOrNegative_whenCreate_thenRejectWithoutWrites(
+            BigDecimal requestedAmount) {
+        InvalidRequestException exception = assertThrows(
+                InvalidRequestException.class,
+                () -> creditApplicationService.create(
+                        new CreateCreditApplicationRequest(
+                                7L,
+                                requestedAmount,
+                                "Working capital")));
+
+        assertEquals(
+                requestedAmount == null
+                        ? "Requested amount is required"
+                        : "Requested amount must be greater than zero",
+                exception.getMessage());
+        verify(companyRepository, never()).findById(any());
+        verify(creditApplicationRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
     @Test
     void submitRecordsAuditAfterStateChangeIsSaved() {
         CreditApplication application = application(

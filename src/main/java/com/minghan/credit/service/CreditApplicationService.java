@@ -68,6 +68,16 @@ public class CreditApplicationService {
     @Transactional
     public CreditApplicationResponse create(CreateCreditApplicationRequest request) {
 
+        BigDecimal requestedAmount = request.requestedAmount();
+
+        if (requestedAmount == null) {
+            throw new InvalidRequestException("Requested amount is required");
+        }
+
+        if (requestedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidRequestException("Requested amount must be greater than zero");
+        }
+
         Company company = companyRepository.findById(request.companyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Company not found"));
 
@@ -76,7 +86,7 @@ public class CreditApplicationService {
         CreditApplication application = new CreditApplication(
                 company,
                 createdBy,
-                request.requestedAmount(),
+                requestedAmount,
                 request.purpose());
 
         CreditApplication savedApplication = creditApplicationRepository.save(application);

@@ -441,3 +441,246 @@ Content-Type: application/json
 # FROM audit_logs
 # WHERE actor_username = 'stage5_rm'
 #   AND action = 'CREATE_DRAWDOWN';
+### ==================== Stage 9 - Manual Final Verification ====================
+
+# 執行前置條件：
+# 1. 使用 manual-test profile 啟動：
+#    .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=manual-test"
+# 2. 確認 PostgreSQL 已套用 Flyway V1～V7。
+# 3. 依序執行 Stage 9 requests；named requests 會提供 JWT 與 ID response variables。
+# 4. CreditLimit 目前沒有查詢 API，Drawdown 前需以 SQL 查出 ID。
+
+### 1. Health check — expected 200 / OK
+GET {{baseUrl}}/api/health
+
+
+### 2. 建立 Stage 9 Company — expected 200；Company API 目前為 public
+# @name stage9CreateCompany
+POST {{baseUrl}}/api/companies
+Content-Type: application/json
+
+{
+  "name": "Stage 9 Final Verification Company",
+  "taxId": "{{$randomInt 10000000 99999999}}"
+}
+
+
+### 3. RM Login — expected 200
+# @name stage9RmLogin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{rmUsername}}",
+  "password": "{{rmPassword}}"
+}
+
+
+### 4. REVIEWER Login — expected 200
+# @name stage9ReviewerLogin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{reviewerUsername}}",
+  "password": "{{reviewerPassword}}"
+}
+
+
+### 5. Anonymous request — expected 401
+POST {{baseUrl}}/api/credit-applications
+Content-Type: application/json
+
+{
+  "companyId": {{stage9CreateCompany.response.body.$.id}},
+  "requestedAmount": 1000000,
+  "purpose": "Stage 9 anonymous verification"
+}
+
+
+### 6. Invalid JWT — expected 401
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer invalid.jwt.token
+Content-Type: application/json
+
+{
+  "companyId": {{stage9CreateCompany.response.body.$.id}},
+  "requestedAmount": 1000000,
+  "purpose": "Stage 9 invalid JWT verification"
+}
+
+
+### 7. requestedAmount = null — expected 400
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage9CreateCompany.response.body.$.id}},
+  "requestedAmount": null,
+  "purpose": "Stage 9 requestedAmount null verification"
+}
+
+
+### 8. requestedAmount = 0 — expected 400
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage9CreateCompany.response.body.$.id}},
+  "requestedAmount": 0,
+  "purpose": "Stage 9 requestedAmount zero verification"
+}
+
+
+### 9. 建立 Approve 專用 Application — expected 201 / DRAFT
+# @name stage9CreateApproveApplication
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage9CreateCompany.response.body.$.id}},
+  "requestedAmount": 5000000,
+  "purpose": "Stage 9 approve verification"
+}
+
+
+### 10. Submit Approve 專用 Application — expected 200 / SUBMITTED
+POST {{baseUrl}}/api/credit-applications/{{stage9CreateApproveApplication.response.body.$.id}}/submit
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+
+
+### 11. 重複 Submit — expected 409；不得新增成功 AuditLog
+POST {{baseUrl}}/api/credit-applications/{{stage9CreateApproveApplication.response.body.$.id}}/submit
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+
+
+### 12. RM 嘗試 Approve — expected 403
+POST {{baseUrl}}/api/credit-applications/{{stage9CreateApproveApplication.response.body.$.id}}/approve
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "approvedAmount": 3000000,
+  "comment": "RM must not approve"
+}
+
+
+### 13. REVIEWER Approve — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage9CreateApproveApplication.response.body.$.id}}/approve
+Authorization: Bearer {{stage9ReviewerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "approvedAmount": 3000000,
+  "comment": "Stage 9 final approval"
+}
+
+
+### 14. 建立 Reject 專用 Application — expected 201
+# @name stage9CreateRejectApplication
+POST {{baseUrl}}/api/credit-applications
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "companyId": {{stage9CreateCompany.response.body.$.id}},
+  "requestedAmount": 2000000,
+  "purpose": "Stage 9 reject verification"
+}
+
+
+### 15. Submit Reject 專用 Application — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage9CreateRejectApplication.response.body.$.id}}/submit
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+
+
+### 16. REVIEWER Reject — expected 200
+POST {{baseUrl}}/api/credit-applications/{{stage9CreateRejectApplication.response.body.$.id}}/reject
+Authorization: Bearer {{stage9ReviewerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "comment": "Stage 9 final rejection"
+}
+
+
+### 17. Filtering / Pagination / Sorting — expected 200
+GET {{baseUrl}}/api/credit-applications?status=APPROVED&page=0&size=10&sort=createdAt,desc
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+
+
+### 18. Invalid status — expected 400
+GET {{baseUrl}}/api/credit-applications?status=UNKNOWN&page=0&size=20
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+
+
+# Drawdown 前先查詢並填入：
+# SELECT id FROM credit_limits
+# WHERE application_id = <stage9CreateApproveApplication response id>;
+@stage9CreditLimitId = 0
+
+### 19. RM 建立 Drawdown — expected 201
+# @name stage9CreateDrawdown
+POST {{baseUrl}}/api/credit-limits/{{stage9CreditLimitId}}/drawdowns
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "amount": 100000
+}
+
+
+### 20. Excess Drawdown — expected 409；availableAmount 不變且不得新增成功 AuditLog
+POST {{baseUrl}}/api/credit-limits/{{stage9CreditLimitId}}/drawdowns
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "amount": 999999999
+}
+
+
+### 21. Drawdown amount = 0 — expected 400
+POST {{baseUrl}}/api/credit-limits/{{stage9CreditLimitId}}/drawdowns
+Authorization: Bearer {{stage9RmLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "amount": 0
+}
+
+
+### 22. REVIEWER 嘗試建立 Drawdown — expected 403
+POST {{baseUrl}}/api/credit-limits/{{stage9CreditLimitId}}/drawdowns
+Authorization: Bearer {{stage9ReviewerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "amount": 100000
+}
+
+
+### 23. AuditLog 最終驗證 SQL（目前沒有 AuditLog 查詢 API）
+# SELECT id, actor_username, action, entity_type, entity_id, created_at
+# FROM audit_logs
+# WHERE (entity_type = 'CREDIT_APPLICATION'
+#        AND entity_id IN (
+#            <stage9 approve application id>,
+#            <stage9 reject application id>))
+#    OR (entity_type = 'DRAWDOWN'
+#        AND entity_id = <stage9 drawdown id>)
+# ORDER BY id;
+#
+# 預期成功紀錄：
+# stage5_rm       / CREATE_CREDIT_APPLICATION
+# stage5_rm       / SUBMIT_CREDIT_APPLICATION
+# stage5_reviewer / APPROVE_CREDIT_APPLICATION
+# stage5_rm       / CREATE_CREDIT_APPLICATION
+# stage5_rm       / SUBMIT_CREDIT_APPLICATION
+# stage5_reviewer / REJECT_CREDIT_APPLICATION
+# stage5_rm       / CREATE_DRAWDOWN
+#
+# 重複 Submit、Excess Drawdown 與其他失敗 action 不得產生成功 AuditLog。
