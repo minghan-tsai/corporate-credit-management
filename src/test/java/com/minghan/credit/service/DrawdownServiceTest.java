@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -157,6 +159,39 @@ class DrawdownServiceTest {
                 AuditAction.CREATE_DRAWDOWN,
                 AuditEntityType.DRAWDOWN,
                 9L);
+    }
+
+    @Test
+    void givenAmountEqualsAvailableAmount_whenCreate_thenPersistDrawdownAndExhaustLimit() {
+        BigDecimal availableAmount = new BigDecimal("100.00");
+        CreditLimit creditLimit = creditLimitWithAvailableAmount("100.00");
+        ReflectionTestUtils.setField(creditLimit, "id", CREDIT_LIMIT_ID);
+        when(creditLimitRepository.findByIdForUpdate(CREDIT_LIMIT_ID))
+                .thenReturn(Optional.of(creditLimit));
+        when(drawdownRepository.save(any(Drawdown.class)))
+                .thenAnswer(invocation -> {
+                    Drawdown saved = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(saved, "id", 10L);
+                    return saved;
+                });
+
+        DrawdownResponse response = drawdownService.create(
+                CREDIT_LIMIT_ID,
+                new CreateDrawdownRequest(availableAmount));
+
+        assertEquals(10L, response.id());
+        assertEquals(new BigDecimal("0.00"), creditLimit.getAvailableAmount());
+
+        ArgumentCaptor<Drawdown> captor = ArgumentCaptor.forClass(Drawdown.class);
+        verify(drawdownRepository).save(captor.capture());
+        Drawdown savedDrawdown = captor.getValue();
+        assertSame(creditLimit, savedDrawdown.getCreditLimit());
+        assertEquals(availableAmount, savedDrawdown.getAmount());
+        assertSame(currentUser, savedDrawdown.getCreatedBy());
+        verify(auditLogService).record(
+                AuditAction.CREATE_DRAWDOWN,
+                AuditEntityType.DRAWDOWN,
+                10L);
     }
 
     private CreditLimit creditLimitWithAvailableAmount(String amount) {

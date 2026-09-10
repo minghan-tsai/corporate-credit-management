@@ -1,7 +1,6 @@
 package com.minghan.credit.controller;
 
 import com.minghan.credit.dto.CreditApplicationPageResponse;
-import com.minghan.credit.entity.CreditApplicationStatus;
 import com.minghan.credit.exception.GlobalExceptionHandler;
 import com.minghan.credit.service.CreditApplicationService;
 import org.junit.jupiter.api.BeforeEach;

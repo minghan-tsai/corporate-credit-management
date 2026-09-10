@@ -8,7 +8,7 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 
 `Company → CreditApplication → Submit → Review → Approve / Reject → CreditLimit → Drawdown`
 
-目前已完成 Company Backend／APIs、CreditApplication 建立與審核流程、登入／JWT／RBAC／Maker-Checker、Drawdown 額度動用，以及 Stage 7 的全域錯誤處理、Audit Trail、Filtering 與 Pagination；下一階段為 Stage 8 Automated Tests／CI。
+目前已完成 Company Backend／APIs、CreditApplication 建立與審核流程、登入／JWT／RBAC／Maker-Checker、Drawdown 額度動用、全域錯誤處理、Audit Trail、Filtering／Pagination，以及 Stage 8 Automated Tests／CI 的實作與本機驗證；下一階段為 Stage 9 Documentation／Final Verification。
 
 ## 3. Current Progress
 
@@ -22,9 +22,10 @@ Corporate Credit Management System 是以 Java 與 Spring Boot 開發的 Backend
 | Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed |
 | Stage 6 | Drawdown／Transaction | Completed |
 | Stage 7 | Audit／Exception／Filtering／Pagination | Completed |
-| Stage 8 | Automated Tests／CI | Next |
+| Stage 8 | Automated Tests／CI | Implementation／Local Verification Completed；Remote CI Pending |
+| Stage 9 | Documentation／Final Verification | Next |
 
-Stage 7 已於 2026-09-09 完成實作、自動化測試與人工驗證；後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+Stage 8 已完成測試補強與 CI workflow 設定，本機 59 tests 全數通過；GitHub Actions 待 push 後進行遠端驗證。後續進度請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
 
 ## 4. Implemented Features
 
@@ -116,17 +117,19 @@ Stage 7 已於 2026-09-09 完成實作、自動化測試與人工驗證；後續
 ### Testing
 
 - Spring Boot Test Dependency
+- Spring Security Test Dependency
 - Maven Lifecycle 驗證成功
 - Stage 4～Stage 7 REST Client 人工驗證完成
-- Stage 7 完成 29 個 automated tests，Maven `test` 與 `package` 均為 `BUILD SUCCESS`
+- Stage 8 累計 59 個 automated tests，本機 Maven `test` 為 0 failures／0 errors／0 skipped，`BUILD SUCCESS`
+- GitHub Actions CI workflow 已設定 push／pull request、JDK 21、Maven test／package 與 dependency cache，待遠端驗證
 
 ### Later Stages
 
 - Stage 5：Security／JWT／RBAC／Maker-Checker（Completed）
 - Stage 6：Drawdown／Transaction（Completed）
 - Stage 7：Audit／Exception／Filtering／Pagination（Completed）
-- Stage 8：Automated Tests／CI（Next）
-- Stage 9：Documentation／Final Verification
+- Stage 8：Automated Tests／CI（Implementation／Local Verification Completed；Remote CI Pending）
+- Stage 9：Documentation／Final Verification（Next）
 - Stage 10（Optional）：Docker／Docker Compose／One-command Startup
 - Stage 11（Optional）：Public Deployment
 
@@ -168,6 +171,7 @@ Stage 5 已完成基本 Security Boundary：
 - Session 採 Stateless，CSRF 關閉；`/api/auth/login` 可匿名存取，授信流程需通過 Authentication 與 method-level RBAC。
 - RM 可建立與 Submit 授信申請，REVIEWER 可 Approve／Reject；Service 層 Maker-Checker 禁止建立者審核自己的案件。
 - Drawdown API 僅允許 RM；Service 從 JWT SecurityContext 取得目前使用者並記錄為 `createdBy`。
+- Security Filter Chain 已設定 AuthenticationEntryPoint：未登入或無效／過期 JWT 回傳 401，已登入但權限不足回傳 403。
 - Health、Company API 與 `/error` 仍維持目前開發階段的 `permitAll` 設定。
 
 ## 10. Testing Status
@@ -181,29 +185,33 @@ Stage 5 已完成基本 Security Boundary：
 - DRAFT 直接 Approve、核准金額超過申請金額、空白 Reject comment，以及已 APPROVED 後再次 Approve 均已確認被 Business Rule 阻擋。
 - 重複 Submit 已由 Business Rule 阻擋；Stage 7 全域錯誤處理會回傳 409 Conflict。
 - Stage 4 原有的 Business Rule 錯誤已於 Stage 7 納入一致的 400／404／409 error contract。
-- Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證登入、JWT、未登入／無效 token、RBAC 與 Maker-Checker。
+- Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證 Login、JWT、RBAC 與 Maker-Checker。
 - Stage 6 已人工驗證 RM 正常建立 Drawdown（201）、amount = 0（400）、超額（409 Conflict），以及 REVIEWER 權限阻擋（403）。
-- `DrawdownServiceTest` 的 CreditLimit 不存在、null／0／負數／超額金額共 5 個測試皆通過。
+- `DrawdownServiceTest` 已補 amount 等於 availableAmount 的邊界測試，驗證成功動用後剩餘額度為 0。
 - Maven `test` Lifecycle 驗證。
 - Maven `package` Lifecycle 驗證。
 - Stage 7 automated tests 共 29 個，涵蓋全域錯誤格式、Audit action／transaction boundary、CreditApplication filtering／pagination，以及 Drawdown business conflict。
+- Stage 8 補強 `CreditApplicationServiceTest` 的 Maker-Checker、Approve／Reject 狀態、核准金額、重複 Review／CreditLimit 與 Reject reason 規則。
+- Stage 8 使用 Spring Security Test 經實際 Security Filter Chain 與 `@PreAuthorize` 明確驗證 anonymous／invalid JWT 回傳 401、已登入但角色不足回傳 403，以及 RM／REVIEWER／ADMIN RBAC；測試曾發現 anonymous request 原本回傳 403，加入 AuthenticationEntryPoint 後修正為 401。
+- 目前累計 59 tests；本機 Maven `test` 為 0 failures／0 errors／0 skipped，`BUILD SUCCESS`。
+- `.github/workflows/ci.yml` 已完成 push／pull request CI 設定，使用 Ubuntu、JDK 21、Maven Wrapper、dependency cache、`test` 與 `package`；待 push 後進行遠端驗證。
 - Stage 7 Manual Test 已驗證 pagination、filtering、sorting、400／404／409、Approve／Reject／Drawdown Audit Trail、失敗 action 不產生成功 Audit，以及超額 Drawdown 後 availableAmount 不變。
 - `git diff --check` PASS。
 
 尚未完成：
 
-- 其他核心 Unit Tests
-- Integration Tests
-- Automated Security Tests
-- Transaction Tests
+- Testcontainers／Database Integration Tests
+- 真實資料庫 Transaction Rollback Tests
+- Drawdown Concurrency Integration Tests
+- GitHub Actions Remote Verification
 
 ## 11. Roadmap
 
 - Stage 5：Security／JWT／RBAC／Maker-Checker（Completed：2026-09-07）
 - Stage 6：Drawdown／Transaction（Completed：2026-09-08）
 - Stage 7：Audit／Exception／Filtering／Pagination（Completed：2026-09-09）
-- Stage 8：Automated Tests／CI（Next）
-- Stage 9：Documentation／Final Verification
+- Stage 8：Automated Tests／CI（Implementation／Local Verification Completed；Remote CI Pending）
+- Stage 9：Documentation／Final Verification（Next）
 - Stage 10（Optional）：Docker／Docker Compose／One-command Startup
 - Stage 11（Optional）：Public Deployment；不得排擠 Business Logic、Security、Testing 等核心工作
 

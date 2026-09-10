@@ -256,8 +256,9 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 - PostgreSQL JDBC Driver
 - Flyway Core 與 Flyway PostgreSQL Support
 - Spring Boot Test Dependency
+- Spring Security Test Dependency
 
-JWT Authentication 已於 Stage 5 完成；Stage 6 已開始使用 JUnit 5 與 Mockito，後續規劃使用 OpenAPI／Swagger 與 GitHub Actions。Docker Compose 保留至 Optional Stage 10。Testcontainers 為高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
+JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI。OpenAPI／Swagger 仍為後續規劃。Docker Compose 保留至 Optional Stage 10。Testcontainers 為尚未實作的高優先選配加分項。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
 
 Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
@@ -333,8 +334,8 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 
 ### Current Status
 
-- 已建立 `DrawdownServiceTest`，以 JUnit 5／Mockito 驗證 Stage 6 核心 Business Rules。
-- Maven `test` 與 `package` Lifecycle 均為 `BUILD SUCCESS`。
+- 已使用 JUnit 5／Mockito 驗證 CreditApplication、Drawdown 與 Audit 核心 Business Rules，並使用 Spring Security Test 驗證實際 Security Filter Chain 與 Method Security。
+- 本機 Maven `test` 共 59 tests，0 failures／0 errors／0 skipped，`BUILD SUCCESS`。
 - VS Code REST Client 人工 Company API 驗證已完成。
 - VS Code REST Client 已人工驗證 CreditApplication 建立與 Submit 成功。
 - PostgreSQL 已人工確認 CreditApplication 資料寫入，以及 `DRAFT → SUBMITTED` 狀態轉換。
@@ -343,10 +344,14 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - Reject 人工驗證已完成：Application #6 的 requestedAmount 為 5,000,000，最終狀態為 `REJECTED`，CreditReview decision 為 `REJECTED`、approvedAmount 為 NULL，且未建立 CreditLimit。
 - DRAFT 直接 Approve、approvedAmount 大於 requestedAmount、Reject comment 空白，以及已 APPROVED 再次 Approve 均已人工確認被阻擋。
 - Stage 4 原有 Business Rule 錯誤已於 Stage 7 納入一致的 400／404／409 error contract。
-- Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證 Login、JWT、未登入／無效 JWT、RM／REVIEWER RBAC 與 Maker-Checker。
+- Stage 5 已以 manual-test profile 與 VS Code REST Client 人工驗證 Login、JWT、RM／REVIEWER RBAC 與 Maker-Checker。
 - Stage 6 已人工驗證 RM 正常建立 Drawdown（201）、amount = 0（400）、超額（409 Conflict），以及 REVIEWER 建立 Drawdown（403）。
-- `DrawdownServiceTest` 已驗證 CreditLimit 不存在及 null／0／負數／超額金額，共 5 tests PASS。
+- `DrawdownServiceTest` 已驗證 CreditLimit 不存在、null／0／負數／超額金額，以及 amount 等於 availableAmount 時成功且剩餘額度為 0。
 - Stage 7 automated tests 共 29 個，涵蓋 Global Exception Handling、Audit、Transaction Boundary、CreditApplication filtering／pagination 與 Drawdown business conflict；`mvnw test` 為 0 failures／0 errors。
+- Stage 8 補強 CreditApplication Maker-Checker、Approve／Reject invalid status、invalid approvedAmount、duplicate Review／CreditLimit 與 invalid reject reason Unit Tests。
+- Stage 8 Security Tests 經實際 Security Filter Chain 與 `@PreAuthorize` 明確驗證 anonymous／invalid JWT 回傳 401、已登入但角色不足回傳 403，以及 RM／REVIEWER／ADMIN RBAC；測試曾發現 anonymous request 原本回傳 403，SecurityConfig 加入 AuthenticationEntryPoint 後修正為 401。
+- Stage 8 完成後累計 59 tests，本機執行 0 failures／0 errors／0 skipped。
+- GitHub Actions workflow 已設定 push／pull request、Ubuntu、JDK 21、Maven Wrapper、dependency cache、`test` 與 `package`；尚待 push 後進行 remote CI verification。
 - Stage 7 Manual Test 已驗證 pagination、filtering、sorting、400／404／409、Approve／Reject／Drawdown Audit Trail、失敗 action 不產生成功 Audit，以及超額 Drawdown 後 availableAmount 不變。
 - `mvnw package` 為 `BUILD SUCCESS`，`git diff --check` PASS。
 
@@ -357,16 +362,16 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 
 ### Integration Test
 
-- 使用 Spring Boot Test。
-- 涵蓋核心 API、Repository 與 Database Flow。
+- Testcontainers／Database Integration Tests 尚未實作。
+- 真實資料庫 API、Repository 與 Transaction Rollback 驗證保留為後續加分項。
 
 ### Security Test
 
-至少驗證：
+Stage 8 已驗證：
 
-- Controller／Service 內的 AuthenticationException 與 AccessDeniedException 已分別納入 401／403 mapping；Security filter chain 的既有行為仍另行驗證。
-- RM 呼叫 Approve 回傳 403。
-- REVIEWER 合法執行 Approve 時成功。
+- 測試實際經過 Security Filter Chain 與 Method Security／`@PreAuthorize`。
+- 未登入或無效／過期 JWT 的受保護 API 回傳 401；已登入但角色不足回傳 403。
+- RM／REVIEWER／ADMIN 的 CreditApplication 與 Drawdown 基本 RBAC 規則。
 
 ### Transaction Test
 
@@ -381,7 +386,7 @@ Stage 4 現階段 Reject 任一步驟失敗時，驗證以下項目：
 - CreditApplication 不得錯誤地停留在 REJECTED。
 - CreditReview 不得只完成部分 insert。
 
-Stage 7 已以 `Propagation.MANDATORY` 強制 AuditLog 加入 Approve／Reject 的既有 transaction，並以 automated test 驗證所有 audited actions 都具備 transaction boundary。真實資料庫 rollback integration test 留待 Stage 8。
+Stage 7 已以 `Propagation.MANDATORY` 強制 AuditLog 加入 Approve／Reject 的既有 transaction，並以 automated test 驗證所有 audited actions 都具備 transaction boundary。Stage 8 未實作真實資料庫 rollback integration test。
 
 Drawdown 失敗時，驗證以下所有項目：
 
@@ -396,7 +401,8 @@ Testcontainers 是高優先加分項，但若時程壓力需要可省略。本�
 - 前期開發：Local Java 加 Local PostgreSQL。
 - 核心交付：可執行 JAR、文件、測試與最終驗證。
 - CI Platform：GitHub Actions。
-- 最低 CI Commands：`mvn test` 與 `mvn package`。
+- `.github/workflows/ci.yml` 已設定 push／pull request trigger、Ubuntu、JDK 21、Maven dependency cache，以及 `./mvnw test`／`./mvnw package`。
+- CI workflow implementation completed，尚待 push 後進行 remote verification。
 - Docker／Docker Compose one-command startup 保留至 Optional Stage 10。
 - Public Deployment 保留至 Optional Stage 11。
 
@@ -414,8 +420,8 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 5 | Security／JWT／RBAC／Maker-Checker | Completed | 2026-09-07 |
 | Stage 6 | Drawdown／Transaction | Completed | 2026-09-08 |
 | Stage 7 | Audit／Exception／Filtering／Pagination | Completed | 2026-09-09 |
-| Stage 8 | Automated Tests／CI | Next | - |
-| Stage 9 | Documentation／Final Verification | Planned | - |
+| Stage 8 | Automated Tests／CI | Implementation／Local Verification Completed；Remote CI Pending | 2026-09-10 |
+| Stage 9 | Documentation／Final Verification | Next | - |
 | Stage 10 | Docker／Docker Compose／One-command Startup | Optional | - |
 | Stage 11 | Public Deployment | Optional | - |
 
@@ -457,9 +463,9 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 
 ## 14. Current Status
 
-**Current Stage：Stage 7 Completed**
+**Current Stage：Stage 8 Implementation／Local Verification Completed；Remote CI Pending**
 
-**Next Stage：Stage 8 — Automated Tests／CI**
+**Next Stage：Stage 9 — Documentation／Final Verification**
 
 - AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
 - BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
@@ -469,13 +475,15 @@ Stage 10 與 Stage 11 為後續新增的 Optional Roadmap，不設定核心交�
 - `manual-test` profile 以 CommandLineRunner 建立本機 BCrypt 測試帳號，並已完成人工 Security 整合驗證。
 - Drawdown 已完成 RM-only RBAC、JWT current user／`createdBy`、交易邊界、Pessimistic Lock、`availableAmount` 扣減與 Dirty Checking。
 - Drawdown 的 CreditLimit 不存在回傳 404，null／0／負數回傳 400，超額 availableAmount 回傳 409；REVIEWER 建立回傳 403。
-- Stage 6 人工測試 PASS；`DrawdownServiceTest` 5 tests PASS，Maven `test` Lifecycle 為 `BUILD SUCCESS`。
+- Stage 6 人工測試 PASS；Stage 8 已補 Drawdown 全額動用邊界測試，驗證 availableAmount 歸零。
 - Stage 7 已完成 `@RestControllerAdvice`／`@ExceptionHandler`、統一 `ApiErrorResponse`，以及 400／404／409 error mapping。
 - AuditLog 已以 enum action／entity type、SecurityContext actor 與 `Propagation.MANDATORY` 納入五項核心 business transactions。
 - CreditApplication list API 已完成 status filtering、DB pagination、sorting、page／size validation 與 Response DTO。
-- Stage 7 automated tests 共 29 個，`mvnw test` 0 failures／0 errors，`mvnw package` 與 `git diff --check` 均 PASS。
+- Stage 7 automated tests baseline 為 29 個；Stage 8 補強 CreditApplication Business Rules、Maker-Checker、Security RBAC 與 Drawdown 邊界後累計 59 tests。
+- Stage 8 本機 `mvnw test` 為 0 failures／0 errors／0 skipped，`BUILD SUCCESS`。
+- GitHub Actions CI workflow 已設定完成，remote CI verification 待 push 後執行；Testcontainers、DB integration tests 與 concurrency integration tests 尚未實作。
 - Stage 7 Manual Test 已驗證查詢、錯誤 response、Audit Trail、失敗 action 不留成功 Audit，以及超額 Drawdown rollback 行為。
-- Stage 7 完成日為 2026-09-09；下一階段為 Stage 8：Automated Tests／CI。
+- Stage 8 implementation／local verification 完成日為 2026-09-10；下一階段為 Stage 9：Documentation／Final Verification。
 
 ## 15. Definition of Done
 

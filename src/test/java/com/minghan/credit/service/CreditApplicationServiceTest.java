@@ -23,6 +23,9 @@ import com.minghan.credit.repository.CreditReviewRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -199,7 +202,86 @@ class CreditApplicationServiceTest {
     }
 
     @Test
-    void approveDoesNotRecordAuditWhenBusinessValidationFails() {
+    void givenMakerIsReviewer_whenApprove_thenRejectWithoutCreatingReviewOrLimit() {
+        AppUser makerAndReviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(makerAndReviewer);
+        CreditApplication application = application(
+                makerAndReviewer,
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.approve(
+                        APPLICATION_ID,
+                        new ApproveCreditApplicationRequest(
+                                new BigDecimal("80.00"),
+                                "Approved")));
+
+        assertEquals(
+                "Maker cannot approve or reject their own credit application",
+                exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(creditLimitRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenMakerIsReviewer_whenReject_thenRejectWithoutCreatingReview() {
+        AppUser makerAndReviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(makerAndReviewer);
+        CreditApplication application = application(
+                makerAndReviewer,
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.reject(
+                        APPLICATION_ID,
+                        new RejectCreditApplicationRequest("Insufficient repayment capacity")));
+
+        assertEquals(
+                "Maker cannot approve or reject their own credit application",
+                exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenApplicationIsNotSubmitted_whenApprove_thenRejectWithoutCreatingReviewOrLimit() {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.DRAFT);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.approve(
+                        APPLICATION_ID,
+                        new ApproveCreditApplicationRequest(
+                                new BigDecimal("80.00"),
+                                "Approved")));
+
+        assertEquals("Only SUBMITTED application can be approved", exception.getMessage());
+        assertEquals(CreditApplicationStatus.DRAFT, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(creditLimitRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"0", "-0.01"})
+    void givenApprovedAmountIsNullZeroOrNegative_whenApprove_thenRejectWithoutWrites(
+            BigDecimal approvedAmount) {
         AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
         authenticate(reviewer);
         CreditApplication application = application(
@@ -208,7 +290,36 @@ class CreditApplicationServiceTest {
         when(creditApplicationRepository.findById(APPLICATION_ID))
                 .thenReturn(Optional.of(application));
 
-        assertThrows(
+        InvalidRequestException exception = assertThrows(
+                InvalidRequestException.class,
+                () -> creditApplicationService.approve(
+                        APPLICATION_ID,
+                        new ApproveCreditApplicationRequest(
+                                approvedAmount,
+                                "Approved")));
+
+        assertEquals(
+                approvedAmount == null
+                        ? "Approved amount is required"
+                        : "Approved amount must be greater than zero",
+                exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(creditLimitRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenApprovedAmountExceedsRequestedAmount_whenApprove_thenRejectWithoutWrites() {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+
+        InvalidRequestException exception = assertThrows(
                 InvalidRequestException.class,
                 () -> creditApplicationService.approve(
                         APPLICATION_ID,
@@ -216,9 +327,133 @@ class CreditApplicationServiceTest {
                                 new BigDecimal("100.01"),
                                 "Amount exceeds request")));
 
+        assertEquals("Approved amount cannot exceed requested amount", exception.getMessage());
         assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
         verify(creditReviewRepository, never()).save(any());
         verify(creditLimitRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenReviewAlreadyExists_whenApprove_thenRejectDuplicateReviewWithoutCreatingLimit() {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+        when(creditReviewRepository.existsByApplicationId(APPLICATION_ID)).thenReturn(true);
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.approve(
+                        APPLICATION_ID,
+                        new ApproveCreditApplicationRequest(
+                                new BigDecimal("80.00"),
+                                "Approved")));
+
+        assertEquals("Credit application has already been reviewed", exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(creditLimitRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenCreditLimitAlreadyExists_whenApprove_thenRejectWithoutCreatingAnotherLimit() {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+        when(creditLimitRepository.existsByApplicationId(APPLICATION_ID)).thenReturn(true);
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.approve(
+                        APPLICATION_ID,
+                        new ApproveCreditApplicationRequest(
+                                new BigDecimal("80.00"),
+                                "Approved")));
+
+        assertEquals("Credit limit already exists for this application", exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(creditLimitRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenApplicationIsNotSubmitted_whenReject_thenRejectWithoutCreatingReview() {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.DRAFT);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.reject(
+                        APPLICATION_ID,
+                        new RejectCreditApplicationRequest("Insufficient repayment capacity")));
+
+        assertEquals("Only SUBMITTED application can be rejected", exception.getMessage());
+        assertEquals(CreditApplicationStatus.DRAFT, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", " ", "\t"})
+    void givenRejectReasonIsNullOrBlank_whenReject_thenRejectWithoutCreatingReview(String reason) {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+
+        InvalidRequestException exception = assertThrows(
+                InvalidRequestException.class,
+                () -> creditApplicationService.reject(
+                        APPLICATION_ID,
+                        new RejectCreditApplicationRequest(reason)));
+
+        assertEquals(
+                "Comment is required when rejecting an application",
+                exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
+        verify(auditLogService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void givenReviewAlreadyExists_whenReject_thenRejectDuplicateReviewWithoutCreatingAnotherReview() {
+        AppUser reviewer = appUser(USERNAME, 2L, Role.REVIEWER);
+        authenticate(reviewer);
+        CreditApplication application = application(
+                appUser("maker", 1L, Role.RM),
+                CreditApplicationStatus.SUBMITTED);
+        when(creditApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(application));
+        when(creditReviewRepository.existsByApplicationId(APPLICATION_ID)).thenReturn(true);
+
+        BusinessRuleException exception = assertThrows(
+                BusinessRuleException.class,
+                () -> creditApplicationService.reject(
+                        APPLICATION_ID,
+                        new RejectCreditApplicationRequest("Insufficient repayment capacity")));
+
+        assertEquals("Credit application has already been reviewed", exception.getMessage());
+        assertEquals(CreditApplicationStatus.SUBMITTED, application.getStatus());
+        verify(creditReviewRepository, never()).save(any());
         verify(auditLogService, never()).record(any(), any(), any());
     }
 
