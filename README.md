@@ -10,7 +10,27 @@
 - **`PESSIMISTIC_WRITE`**：鎖定 CreditLimit，避免並行超額動用。
 - **AuditLog**：記錄申請建立、Submit、Approve、Reject 與 Drawdown。
 - **OpenAPI／Swagger UI**：提供 API 文件與 JWT Authorize 操作介面。
-- **62 tests + GitHub Actions CI**：自動測試核心規則、權限與錯誤處理。
+- **Railway／Neon**：Spring Boot API 已部署至 Railway，production database 使用 Neon PostgreSQL。
+- **67 tests + GitHub Actions CI**：自動測試核心規則、權限與錯誤處理。
+
+## Public Demo
+
+目前狀態為 **Stage 11 Completed**，專案已可透過 Railway 公開環境使用：
+
+- API Base URL：[https://minghan-credit-api.up.railway.app](https://minghan-credit-api.up.railway.app)
+- Swagger UI：[https://minghan-credit-api.up.railway.app/swagger-ui/index.html](https://minghan-credit-api.up.railway.app/swagger-ui/index.html)
+- Health API：[https://minghan-credit-api.up.railway.app/api/health](https://minghan-credit-api.up.railway.app/api/health)
+
+Production 使用 Railway Variables 管理 Neon 連線、JWT secret 與 demo account password，敏感資訊不存放於 Git。Railway 已設定動態 `PORT` 與 forwarded headers，Swagger 會以正確的 HTTPS server URL 發送 request。
+
+展示帳號僅提供：
+
+| Username | Role |
+| --- | --- |
+| `demo_rm` | RM |
+| `demo_reviewer` | REVIEWER |
+
+密碼由 Railway Variables 提供，不公開於 Repository。取得展示密碼後，可先呼叫 `POST /api/auth/login`，再將 JWT 填入 Swagger UI 的 **Authorize**。
 
 ## Core Workflow
 
@@ -38,12 +58,13 @@
 - PostgreSQL、Flyway
 - Spring Security、BCrypt、JWT（JJWT）
 - springdoc-openapi、Swagger UI
+- Railway、Neon PostgreSQL
 - JUnit 5、Mockito、Spring Security Test
 - GitHub Actions
 
 ## API
 
-OpenAPI／Swagger UI 已完成：
+Local Swagger／OpenAPI：
 
 - Swagger UI：`http://localhost:8080/swagger-ui/index.html`
 - OpenAPI JSON：`http://localhost:8080/v3/api-docs`
@@ -113,16 +134,16 @@ $env:JWT_SECRET = "your-base64-encoded-secret"
 
 啟動後可用 `GET http://localhost:8080/api/health` 檢查服務。
 
-### Demo Credentials 與 Swagger JWT
+### 本機 Demo Accounts 與 Swagger JWT
 
 `manual-test` profile 會在帳號不存在時建立以下本機帳號：
 
-| Username | Password | Role |
-| --- | --- | --- |
-| `stage5_rm` | `RmPass123!` | RM |
-| `stage5_reviewer` | `ReviewerPass123!` | REVIEWER |
+| Username | Role |
+| --- | --- |
+| `stage5_rm` | RM |
+| `stage5_reviewer` | REVIEWER |
 
-測試帳號僅供本機使用。在 Swagger UI 呼叫受保護 API：
+帳號僅供本機測試使用，密碼不列於 README。在 Swagger UI 呼叫受保護 API：
 
 1. 呼叫 `POST /api/auth/login` 取得 JWT。
 2. 點選 **Authorize**，輸入 response 中的 `token`。
@@ -143,10 +164,12 @@ Authorization: Bearer <token>
 .\mvnw.cmd package
 ```
 
-- 目前共有 62 個 automated tests，全部通過。
+- 目前共有 67 個 automated tests，全部通過。
 - GitHub Actions 會在 push／pull request 時自動執行 test 與 package。
 - 另外用 REST Client 跑過完整授信流程，包含登入、權限、Approve／Reject、Drawdown 與錯誤情境。
 - PostgreSQL 端也有確認資料寫入、額度扣減與 AuditLog。
+- Railway／Neon production 已驗證 Health、Swagger、RM／REVIEWER JWT 登入、Maker-Checker 與 RBAC。
+- Production 的 Approve 會建立 CreditLimit；成功 Drawdown 會扣減 `availableAmount`，超額請求回傳 409 且額度維持不變。
 
 ## Known Limitations
 
@@ -155,7 +178,7 @@ Authorization: Bearer <token>
 - V1 聚焦核心授信流程，部分查詢與管理 API 尚未補齊；CreditReview service flow 也只允許一次審核。
 - 測試目前以 Unit／Security／Manual flow 為主，尚未加入 Testcontainers、真實 PostgreSQL rollback／concurrency，以及 invalid／expired JWT automated integration tests。
 - `created_by` 仍保留 legacy null 相容性。
-- Docker、Docker Compose 與 Deployment 尚未實作。
+- Public Deployment 已使用 Railway／Neon 完成；Docker 與 Docker Compose 尚未實作。
 
 ## Project Documentation
 
