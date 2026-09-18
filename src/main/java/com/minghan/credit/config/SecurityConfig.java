@@ -1,8 +1,13 @@
 package com.minghan.credit.config;
 
+import java.io.IOException;
+import java.time.Instant;
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -11,8 +16,13 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minghan.credit.exception.ApiErrorResponse;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Configuration
 // 啟用 @PreAuthorize，讓授信端點可在方法層表達 RM／REVIEWER 權限。
@@ -34,7 +44,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            ObjectMapper objectMapper) throws Exception {
         // Stage 2 開發期間暫時放行 Health 與 Company API，正式驗證與權限控管留待後續 Stage
         http
                 .csrf(csrf -> csrf.disable())
@@ -42,8 +53,20 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(
-                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                        .authenticationEntryPoint((request, response, authenticationException) ->
+                                writeErrorResponse(
+                                        request,
+                                        response,
+                                        HttpStatus.UNAUTHORIZED,
+                                        "Authentication required",
+                                        objectMapper))
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                writeErrorResponse(
+                                        request,
+                                        response,
+                                        HttpStatus.FORBIDDEN,
+                                        "Access denied",
+                                        objectMapper)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
@@ -61,5 +84,24 @@ public class SecurityConfig {
                         UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    private void writeErrorResponse(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            HttpStatus status,
+            String message,
+            ObjectMapper objectMapper) throws IOException {
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                message,
+                request.getRequestURI(),
+                List.of());
+
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        objectMapper.writeValue(response.getOutputStream(), errorResponse);
     }
 }

@@ -17,12 +17,28 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Corporate Credit Management API")
-                        .description("Corporate credit application, review, limit, and drawdown APIs")
-                        .version("v1"))
+                        .description("""
+                                REST API for a corporate credit management workflow.
+
+                                Core workflow:
+                                DRAFT -> SUBMITTED -> APPROVED / REJECTED
+
+                                Key business rules:
+                                - RM creates and submits credit applications.
+                                - REVIEWER approves or rejects submitted applications.
+                                - Maker-Checker prevents a user from reviewing their own application.
+                                - Approval creates a credit limit.
+                                - Drawdown amount cannot exceed the available credit limit.
+                                - JWT Bearer authentication is required for protected endpoints.
+                                """)
+                        .version("v1.0.0"))
                 .components(new Components()
-                        .addSecuritySchemes(BEARER_AUTH, new SecurityScheme()
-                                .type(SecurityScheme.Type.HTTP)
-                                .scheme("bearer")
-                                .bearerFormat("JWT")));
+                        .addSecuritySchemes(
+                                BEARER_AUTH,
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")
+                                        .description("Enter the JWT returned by POST /api/auth/login")));
     }
 }

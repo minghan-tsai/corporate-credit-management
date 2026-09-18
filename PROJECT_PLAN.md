@@ -4,6 +4,8 @@
 
 Corporate Credit Management System 是一個以作品集為導向的 Java／Spring Boot Backend，刻意以「小而深」的範圍模擬銀行內部企業授信系統。專案聚焦於企業客戶建檔、授信申請、獨立審核、建立核准額度，以及 Drawdown 的完整生命週期。本專案並非完整的 Core Banking System。
 
+本作品定位為 Java／Spring Boot 金融後端作品；前端 UI 不納入後續範圍，不新增 React、Next.js 或其他前端。Demo 操作入口以 Swagger UI 為主。
+
 本文件同時保存工程計畫與目前實作紀錄。為避免把 roadmap 誤認為已交付功能，狀態統一使用以下語意：
 
 - **已實作**：目前 production code／schema 已存在。
@@ -67,6 +69,7 @@ V1 不包含：
 - Kubernetes
 - Elasticsearch
 - Microservices
+- React／Next.js／其他前端 UI（Demo 以 Swagger UI 為主）
 
 ## 3. Roles
 
@@ -267,7 +270,7 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 - Spring Boot Test Dependency
 - Spring Security Test Dependency
 
-JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI；Stage 10 已完成 springdoc-openapi、Swagger UI 與 JWT Bearer authorization；Stage 11 已完成 Railway／Neon Public Deployment。Docker／Docker Compose 與 Testcontainers 仍為尚未實作的 Optional 項目。Spring Batch 或 Scheduling 僅在後續有合理用途且時程允許時採用。
+JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI；Stage 10 已完成 springdoc-openapi、Swagger UI 與 JWT Bearer authorization；Stage 11 已完成 Railway／Neon Public Deployment。Docker／Docker Compose 是目前下一個 portfolio polish item；Testcontainers、Spring Batch 與 Scheduling 不納入目前作品收尾範圍。
 
 Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
@@ -342,6 +345,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - `manual-test` profile 使用 CommandLineRunner 初始化 BCrypt 測試帳號，不以測試 seed 污染 Flyway migration history。
 - ProductionDemoDataInitializer 只在 `demo.data.enabled=true` 時建立 `demo_rm`／RM 與 `demo_reviewer`／REVIEWER；密碼由外部變數提供並以 BCrypt 儲存，不建立 ADMIN 或業務資料。
 - Swagger UI 與 OpenAPI JSON 路徑已設為 `permitAll`；既有 Business API Security 與 `@PreAuthorize` 規則維持不變。
+- Spring Security 的 401 Unauthorized 與 403 Forbidden 已統一使用 `application/json` 與 `ApiErrorResponse` 欄位格式，HTTP status 語意維持不變。
 
 ## 11. Testing Strategy
 
@@ -369,7 +373,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 - `mvnw package` 為 `BUILD SUCCESS`，`git diff --check` PASS。
 - Stage 9 Manual Final Verification 已完成 22 項 REST 驗證：Health／Company／Login、anonymous 與 invalid JWT 401、`requestedAmount` 400、CreditApplication Create／Submit／Approve／Reject、RBAC 403、Business Conflict 409、Filtering／Pagination／Sorting，以及 Drawdown 201／400／403／409 均符合目前 API contract。
 - Stage 9 PostgreSQL 驗證已確認 Application 16 正確建立 CREATE／SUBMIT／APPROVE AuditLog、Application 17 正確建立 CREATE／SUBMIT／REJECT AuditLog，CreditLimit 5 由 3,000,000 成功扣減為 2,900,000，Drawdown 3 正確建立，且後續失敗操作不會再次扣減額度或新增成功 AuditLog。上述 ID 僅為本次驗證紀錄，不作為永久測試資料依賴。
-- Stage 10 已人工驗證 Swagger UI、OpenAPI JSON、JWT Bearer authorization 與主要 API 顯示；CreditApplication 查詢的 `sort` 已呈現為單一 query string，`createdAt,desc` 與省略 sort 均可正常呼叫。
+- Stage 10 與本次文件強化已人工驗證 Swagger UI、OpenAPI JSON、JWT Bearer authorization、Controller operation／response、Request／Response DTO schema、成功回應 media type／schema，以及 400／401／403／404／409 `ApiErrorResponse` 文件；CreditApplication 查詢的 `sort` 已呈現為單一 query string，`createdAt,desc` 與省略 sort 均可正常呼叫。
 - Stage 11 Railway／Neon production 已驗證 Health API 200、公開 Swagger UI，以及 `demo_rm`／`demo_reviewer` Login 200 與 JWT 簽發。
 - Production 授信流程已驗證 Company／CreditApplication 建立、`DRAFT → SUBMITTED`、REVIEWER Approve 與 CreditLimit 建立；RM Drawdown 回傳 201 並將 `availableAmount` 由 800,000 扣減為 600,000，REVIEWER Drawdown 回傳 403。
 - Production 超額 Drawdown 700,000 回傳 409，`availableAmount` 維持 600,000；Neon 已確認 `credit_limits`／`drawdowns` 寫入結果。
@@ -383,7 +387,7 @@ Company Create Request DTO 與基本 Validation 已完成。CreditApplication �
 ### Integration Test
 
 - Testcontainers／Database Integration Tests 尚未實作。
-- 真實資料庫 API、Repository 與 Transaction Rollback 驗證保留為後續加分項。
+- 真實資料庫 API、Repository 與 Transaction Rollback automated integration test 尚未實作，且不納入目前 portfolio 收尾範圍。
 
 ### Security Test
 
@@ -416,7 +420,7 @@ Drawdown 失敗時，驗證以下所有項目：
 - Drawdown 不得 insert。
 - AuditLog 不得 insert。
 
-Testcontainers 是高優先加分項，但若時程壓力需要可省略。本專案不追求 100% Coverage；目標是充分涵蓋具風險的規則與 Boundary。
+Testcontainers 曾列為加分項，但目前不納入 portfolio 收尾範圍。本專案不追求 100% Coverage；目標是充分涵蓋具風險的規則與 Boundary。
 
 ## 12. Delivery／CI 與 Production Deployment
 
@@ -433,7 +437,7 @@ Testcontainers 是高優先加分項，但若時程壓力需要可省略。本�
 - Production database、JWT 與 demo account credentials 全部由 Railway Variables 管理，不保存於 Git。
 - Production 使用 `SPRING_DATASOURCE_URL`、`DB_USERNAME`、`DB_PASSWORD` 與 `JWT_SECRET`；Demo initializer 使用 `DEMO_DATA_ENABLED`、`DEMO_RM_PASSWORD` 與 `DEMO_REVIEWER_PASSWORD`。
 - `DEMO_DATA_ENABLED` 僅在首次建立帳號時啟用，初始化完成後已設回 `false`。
-- Railway 直接建置 executable JAR；Docker 與 Docker Compose 仍為 Optional，尚未實作。
+- Railway 目前直接建置 executable JAR；Docker／Docker Compose environment setup 尚未實作，列為下一個 portfolio polish item。
 
 Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 或 Testing。
 
@@ -454,7 +458,7 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 10 | OpenAPI／Swagger UI | Completed | 2026-09-10 |
 | Stage 11 | Railway／Neon Public Deployment／Production Demo Accounts | Completed | 2026-09-11 |
 
-Stage 0～11 已完成；Docker／Docker Compose、Testcontainers 與其他延伸項目仍為 Optional。
+Stage 0～11 已完成；目前只剩 Docker／Docker Compose environment setup 與 Docker 完成後的 GitHub README portfolio polish 兩個作品收尾項目。
 
 ### Stage 10 — OpenAPI／Swagger UI（Completed）
 
@@ -464,7 +468,9 @@ Stage 0～11 已完成；Docker／Docker Compose、Testcontainers 與其他延�
 - SecurityConfig 僅放行 Swagger UI／OpenAPI 必要路徑，既有 Business API Security 不變。
 - 主要 Controller 加入 `@Tag`，受保護 Controller 加入 `@SecurityRequirement`。
 - 修正 CreditApplication 查詢的 `sort` 文件，Swagger UI 以 `createdAt,desc` 或 `id,desc` query string 操作。
-- 已人工驗證 Swagger UI 顯示、JWT Authorize、受保護 API 與 sorting，結果 PASS。
+- 已補齊 Controller operation／response documentation、Request／Response DTO schema descriptions／examples、`ApiErrorResponse` schema，以及 400／401／403／404／409 error response documentation。
+- 已明確標註 JSON／String 成功回應的 media type 與 schema，並統一 Security 401／403 JSON error body。
+- 已人工驗證 Swagger UI 顯示、JWT Authorize、受保護 API、response schema 與 sorting，結果 PASS；本機 67 tests、0 failures／0 errors／0 skipped。
 
 ### Stage 11 — Railway／Neon Public Deployment（Completed）
 
@@ -475,7 +481,7 @@ Stage 0～11 已完成；Docker／Docker Compose、Testcontainers 與其他延�
 - Demo account password 沒有 source-code fallback；任一密碼缺少或空白時會以 `IllegalStateException` 阻止不完整設定啟動。
 - Production demo 初始化完成後，`DEMO_DATA_ENABLED` 已設回 `false`；未建立 `demo_admin`。
 - Railway／Neon 已完成 Health、Swagger、Login／JWT、RBAC、Maker-Checker、Approve／CreditLimit、Drawdown 與超額 rollback 行為驗證。
-- Docker／Docker Compose 未實作，維持 Optional。
+- Docker／Docker Compose 尚未實作，現列為下一個 portfolio polish item。
 
 ### Original Schedule
 
@@ -493,7 +499,7 @@ Stage 0～11 已完成；Docker／Docker Compose、Testcontainers 與其他延�
 - Stage 8：原訂 9/6–9/7
 - Stage 9：原訂 9/8–9/10
 
-Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Railway／Neon Public Deployment 已於 2026-09-11 完成。Docker／Docker Compose 維持 Optional。
+Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Railway／Neon Public Deployment 已於 2026-09-11 完成。Docker／Docker Compose environment setup 是目前下一個 portfolio polish item。
 
 2026-09-08 後不得新增大型功能。
 
@@ -501,7 +507,11 @@ Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Railway／Neon
 
 **Current Status：Stage 0～11 開發、部署與驗證已完成，專案已可公開使用**
 
-**Next Stage：維護與 Optional 強化（Docker／Docker Compose、Testcontainers）**
+**Final Portfolio Polish：Docker／Docker Compose environment setup；完成後整理 GitHub README 最終版**
+
+- 前端 UI 已排除於本專案後續範圍，不新增 React、Next.js 或其他前端；Swagger UI 是主要 Demo 操作入口。
+- Swagger／OpenAPI 文件強化已完成：Controller operation／response、Request／Response DTO schema descriptions／examples、`ApiErrorResponse` schema、400／401／403／404／409 error response、Security 401／403 JSON body、成功回應 media type／schema 與 Swagger UI verification 均已完成。
+- 目前只剩 Docker／Docker Compose environment setup，以及 Docker 完成後的 GitHub README portfolio polish；不新增其他功能，README 本次不大幅改寫。
 
 - AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
 - BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
@@ -517,11 +527,11 @@ Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Railway／Neon
 - CreditApplication list API 已完成 status filtering、DB pagination、sorting、page／size validation 與 Response DTO。
 - Stage 7 automated tests baseline 為 29 個；Stage 8 補強 CreditApplication Business Rules、Maker-Checker、Security RBAC 與 Drawdown 邊界後累計 59 tests；Stage 9 requestedAmount 驗證案例加入後累計 62 tests；Stage 11 ProductionDemoDataInitializer tests 加入後累計 67 tests。
 - 目前本機 `mvnw test` 為 0 failures／0 errors／0 skipped，`BUILD SUCCESS`；Stage 8 GitHub Actions remote CI 亦已通過。
-- Testcontainers、DB integration tests、invalid／expired JWT automated integration test 與 concurrency integration tests 尚未實作。
+- Testcontainers、DB integration tests、invalid／expired JWT automated integration test 與 concurrency integration tests 尚未實作，並保留為已知未交付項目，不納入目前 portfolio 收尾範圍。
 - Stage 7 Manual Test 已驗證查詢、錯誤 response、Audit Trail、失敗 action 不留成功 Audit，以及超額 Drawdown rollback 行為。
 - Stage 9 Manual Final Verification 的 22 項 REST 結果均符合預期；PostgreSQL 已確認 Application 16／17、CreditLimit 5、Drawdown 3 的狀態、金額與 AuditLog，失敗操作沒有額外扣減或成功 Audit。
 - Stage 8 implementation／local／remote CI verification 與 Stage 9 documentation／manual final verification 均已於 2026-09-10 完成。
-- Stage 10 已完成 springdoc-openapi、Swagger UI、OpenAPI config、JWT Bearer authorization、Swagger Security permit paths、Controller 文件標註與 `sort` 參數修正，並通過人工驗證。
+- Stage 10 與後續文件強化已完成 springdoc-openapi、Swagger UI、OpenAPI config、JWT Bearer authorization、Swagger Security permit paths、Controller operation／response、DTO schema、`ApiErrorResponse`、400／401／403／404／409 error response、成功回應 media type／schema 與 `sort` 參數修正，並通過人工驗證與 67 tests。
 - Stage 11 已完成 Railway／Neon production deployment、Railway `PORT`、HTTPS forwarded headers、ProductionDemoDataInitializer 與 67 tests；公開環境已驗證 JWT／RBAC、Maker-Checker、Approve／CreditLimit、Drawdown 額度扣減及超額交易不改變餘額。
 
 ## 15. Definition of Done
