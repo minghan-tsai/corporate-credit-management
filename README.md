@@ -1,185 +1,195 @@
 # Corporate Credit Management System
 
-這是一個以 Java 21、Spring Boot 與 PostgreSQL 建置的企業授信管理後端，模擬公司建檔、授信申請、獨立審核、額度建立與動用流程。
+以 **Java 21／Spring Boot** 建置的金融後端作品，模擬企業授信從建檔、申請、獨立審核、額度建立到動用的完整流程，重點展示 **Business Rule、Transaction、Security 與 Testing**。
 
-## Project Highlights
+## 30 秒快速總覽
 
-- **Maker-Checker**：申請建立者不能審核自己的案件。
-- **JWT／RBAC**：依 RM、REVIEWER Role 控制 API 權限。
-- **Transaction**：審核、額度、Drawdown 與 AuditLog 在同一交易內處理。
-- **`PESSIMISTIC_WRITE`**：鎖定 CreditLimit，避免並行超額動用。
-- **AuditLog**：記錄申請建立、Submit、Approve、Reject 與 Drawdown。
-- **OpenAPI／Swagger UI**：提供 API 文件與 JWT Authorize 操作介面。
-- **Railway／Neon**：Spring Boot API 已部署至 Railway，production database 使用 Neon PostgreSQL。
-- **67 tests + GitHub Actions CI**：自動測試核心規則、權限與錯誤處理。
-
-## Public Demo
-
-目前狀態為 **Stage 11 Completed**，專案已可透過 Railway 公開環境使用：
-
-- API Base URL：[https://minghan-credit-api.up.railway.app](https://minghan-credit-api.up.railway.app)
-- Swagger UI：[https://minghan-credit-api.up.railway.app/swagger-ui/index.html](https://minghan-credit-api.up.railway.app/swagger-ui/index.html)
-- Health API：[https://minghan-credit-api.up.railway.app/api/health](https://minghan-credit-api.up.railway.app/api/health)
-
-Production 使用 Railway Variables 管理 Neon 連線、JWT secret 與 demo account password，敏感資訊不存放於 Git。Railway 已設定動態 `PORT` 與 forwarded headers，Swagger 會以正確的 HTTPS server URL 發送 request。
-
-展示帳號僅提供：
-
-| Username | Role |
+| 項目 | 內容 |
 | --- | --- |
-| `demo_rm` | RM |
-| `demo_reviewer` | REVIEWER |
+| Tech Stack | Java 21、Spring Boot 3.5.16、Spring Data JPA、Spring Security、PostgreSQL、Flyway、JWT、OpenAPI |
+| 核心流程 | Company → CreditApplication → Submit → Approve／Reject → CreditLimit → Drawdown |
+| Production | Railway Spring Boot API + Neon PostgreSQL |
+| Production API Base URL | [https://minghan-credit-api.up.railway.app](https://minghan-credit-api.up.railway.app) |
+| Swagger UI | [https://minghan-credit-api.up.railway.app/swagger-ui/index.html](https://minghan-credit-api.up.railway.app/swagger-ui/index.html) |
+| Health API | [https://minghan-credit-api.up.railway.app/api/health](https://minghan-credit-api.up.railway.app/api/health) |
+| CI／Tests | 67 tests；JUnit 5、Mockito、Spring Security Test、GitHub Actions |
+| Docker | Multi-stage image + PostgreSQL 16 Compose environment；已完成本機驗證 |
 
-密碼由 Railway Variables 提供，不公開於 Repository。取得展示密碼後，可先呼叫 `POST /api/auth/login`，再將 JWT 填入 Swagger UI 的 **Authorize**。
+Production secrets、Neon connection 與 demo account passwords 由 Railway Variables 管理，不存放於 Repository。展示帳號角色為 `demo_rm`／RM 與 `demo_reviewer`／REVIEWER；密碼不公開於 Git。
 
-## Core Workflow
+## 系統架構
 
-`Company → CreditApplication → Submit → Approve / Reject → CreditLimit → Drawdown`
+### Production
 
-合法狀態轉換：
-
-- `DRAFT → SUBMITTED → APPROVED`
-- `DRAFT → SUBMITTED → REJECTED`
-
-## Business Rules
-
-- Company 提供建立與查詢；`name` 不可空白，8 碼 `taxId` 必須唯一。
-- RM 可以建立與 Submit CreditApplication；新案件為 `DRAFT`，`requestedAmount` 必須大於 0。
-- 申請流程只允許 `DRAFT → SUBMITTED`，再由 `SUBMITTED → APPROVED／REJECTED`。
-- 審核由 REVIEWER 執行，Maker-Checker 規則禁止經辦人審核自己的案件。
-- `approvedAmount` 不得超過 `requestedAmount`，Approve 後建立 CreditLimit，初始可用額度等於核准額度；Reject 必須填寫原因。
-- Drawdown 金額必須大於 0，且不得超過 `availableAmount`。
-- Approve、Reject 與 Drawdown 都在 Transaction 中執行；Drawdown 另以 `PESSIMISTIC_WRITE` 鎖定額度。
-
-## Tech Stack
-
-- Java 21、Spring Boot 3.5.16、Maven Wrapper
-- Spring Web／Validation、Spring Data JPA／Hibernate
-- PostgreSQL、Flyway
-- Spring Security、BCrypt、JWT（JJWT）
-- springdoc-openapi、Swagger UI
-- Railway、Neon PostgreSQL
-- JUnit 5、Mockito、Spring Security Test
-- GitHub Actions
-
-## API
-
-Local Swagger／OpenAPI：
-
-- Swagger UI：`http://localhost:8080/swagger-ui/index.html`
-- OpenAPI JSON：`http://localhost:8080/v3/api-docs`
-
-| Method | Endpoint | 權限 | 說明 |
-| --- | --- | --- | --- |
-| `GET` | `/api/health` | Public | Health check |
-| `POST` | `/api/auth/login` | Public | 驗證帳密並簽發 JWT |
-| `POST` | `/api/companies` | Public（V1 limitation） | 建立 Company |
-| `GET` | `/api/companies` | Public（V1 limitation） | 查詢全部 Company |
-| `GET` | `/api/companies/{id}` | Public（V1 limitation） | 查詢單一 Company |
-| `POST` | `/api/credit-applications` | RM | 建立 DRAFT 申請 |
-| `POST` | `/api/credit-applications/{id}/submit` | RM | Submit DRAFT 申請 |
-| `GET` | `/api/credit-applications` | Authenticated | Filtering／Pagination／Sorting |
-| `POST` | `/api/credit-applications/{id}/approve` | REVIEWER | Approve SUBMITTED 申請 |
-| `POST` | `/api/credit-applications/{id}/reject` | REVIEWER | Reject SUBMITTED 申請 |
-| `POST` | `/api/credit-limits/{creditLimitId}/drawdowns` | RM | 建立 Drawdown |
-
-## Run Locally
-
-### 環境與資料庫
-
-- JDK 21
-- PostgreSQL
-- Maven Wrapper 已包含在 Repository 中。
-
-預設連線為 `localhost:5432/corporate_credit_management`，請先建立 database：
-
-```sql
-CREATE DATABASE corporate_credit_management;
+```mermaid
+flowchart LR
+    Client["Client / Swagger UI"] --> API["Railway<br/>Spring Boot API"]
+    API --> DB[("Neon PostgreSQL")]
 ```
 
-啟動時由 Flyway 套用 migration，Hibernate 使用 `ddl-auto=validate`。
+### Local Docker
 
-### Environment Variables
-
-| 變數 | 必要性 | 說明 |
-| --- | --- | --- |
-| `DB_PASSWORD` | 必要 | PostgreSQL password |
-| `DB_USERNAME` | 選填 | 預設 `postgres` |
-| `SPRING_DATASOURCE_URL` | 選填 | 覆寫預設 PostgreSQL URL |
-| `JWT_SECRET` | Production 必要 | Base64 JWT signing key；預設值僅供本機開發 |
-| `JWT_EXPIRATION_MS` | 選填 | JWT 有效時間，預設 `3600000` ms |
-
-PowerShell 範例：
-
-```powershell
-$env:DB_USERNAME = "postgres"
-$env:DB_PASSWORD = "your-local-password"
-$env:JWT_SECRET = "your-base64-encoded-secret"
+```mermaid
+flowchart LR
+    Browser --> App["Spring Boot container<br/>port 8080"]
+    App --> DB["PostgreSQL 16 container<br/>port 5432"]
+    DB --> Volume[("postgres_data<br/>named volume")]
 ```
 
-### 啟動
+Docker 用於本機 packaging 與可重現環境；目前 production deployment 仍是 **Railway + Neon PostgreSQL**。
 
-```powershell
-# Windows
-.\mvnw.cmd spring-boot:run
+## 核心業務流程
 
-# Windows：啟用本機人工測試帳號
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=manual-test"
+```mermaid
+flowchart LR
+    Company["Company<br/>RM 建立"] --> Application["CreditApplication<br/>RM 建立"]
+    Application --> Draft[DRAFT]
+    Draft -->|RM Submit| Submitted[SUBMITTED]
+    Submitted -->|"REVIEWER Approve<br/>Maker-Checker"| Approved[APPROVED]
+    Submitted -->|"REVIEWER Reject<br/>Maker-Checker"| Rejected[REJECTED]
+    Approved --> Limit[CreditLimit]
+    Limit -->|"RM Drawdown<br/>amount ≤ availableAmount"| Drawdown[Drawdown]
 ```
+
+## ERD
+
+```mermaid
+erDiagram
+    COMPANY ||--o{ CREDIT_APPLICATION : has
+    APP_USER ||--o{ CREDIT_APPLICATION : creates
+    CREDIT_APPLICATION ||--o{ CREDIT_REVIEW : receives
+    CREDIT_APPLICATION ||--o| CREDIT_LIMIT : creates
+    CREDIT_LIMIT ||--o{ DRAWDOWN : supports
+    APP_USER ||--o{ DRAWDOWN : creates
+
+    COMPANY {
+        bigint id PK
+        string name
+        string taxId UK
+        datetime createdAt
+    }
+
+    APP_USER {
+        bigint id PK
+        string username UK
+        string password
+        string role
+    }
+
+    CREDIT_APPLICATION {
+        bigint id PK
+        bigint companyId FK
+        bigint createdBy FK
+        decimal requestedAmount
+        string purpose
+        string status
+        datetime createdAt
+    }
+
+    CREDIT_REVIEW {
+        bigint id PK
+        bigint applicationId FK
+        string decision
+        decimal approvedAmount
+        string comment
+        datetime reviewedAt
+    }
+
+    CREDIT_LIMIT {
+        bigint id PK
+        bigint applicationId FK, UK
+        decimal limitAmount
+        decimal availableAmount
+        datetime createdAt
+    }
+
+    DRAWDOWN {
+        bigint id PK
+        bigint creditLimitId FK
+        bigint createdBy FK
+        decimal amount
+        datetime createdAt
+    }
+
+    AUDIT_LOG {
+        bigint id PK
+        string actorUsername
+        string action
+        string entityType
+        bigint entityId
+        datetime createdAt
+    }
+```
+
+`AuditLog` 保存 actor username 與操作目標 snapshot，目前沒有對 `AppUser` 或業務 Entity 建立 Foreign Key。
+
+## 核心 Business Rules
+
+- 狀態只允許 `DRAFT → SUBMITTED → APPROVED／REJECTED`。
+- Maker-Checker 在 Service 層禁止申請建立者審核自己的案件。
+- Approve 時 `approvedAmount > 0` 且不得超過 `requestedAmount`。
+- Approve transaction 同時更新 Application、建立 CreditReview 與唯一 CreditLimit。
+- Reject 建立 CreditReview，但不建立 CreditLimit。
+- Drawdown 以 `PESSIMISTIC_WRITE` 鎖定 CreditLimit，避免並行超額動用。
+- Drawdown 超過 `availableAmount` 回傳 `409 Conflict`，且不得扣減額度或留下部分資料。
+- AuditLog 加入既有 business transaction；business action 或 audit write 失敗時同步 rollback。
+
+## Security
+
+- JWT authentication，Spring Security 採 Stateless Session。
+- RBAC 區分 RM 與 REVIEWER：RM 建立／Submit／Drawdown，REVIEWER Approve／Reject。
+- Maker-Checker 是獨立的 Service business rule，不只依賴 endpoint role authorization。
+- 未登入與權限不足分別使用 `401 Unauthorized`／`403 Forbidden`，並回傳一致的 JSON error contract。
+- 密碼使用 BCrypt；JWT secret 與 production credentials 全部外部化。
+
+## Testing／CI
+
+- **67 automated tests**，目前為 0 failures／0 errors／0 skipped。
+- 使用 JUnit 5、Mockito 與 Spring Security Test 驗證 Business Rules、Transaction Boundary、RBAC、Maker-Checker 與錯誤回應。
+- GitHub Actions 在 push／pull request 執行 Maven `test` 與 `package`。
+- 已以 REST Client 與 PostgreSQL 人工驗證完整授信流程、Audit Trail、額度扣減與失敗 rollback。
+- Railway／Neon production 已驗證 Health、Swagger、JWT Login、RBAC、Maker-Checker、Approve／CreditLimit 與 Drawdown。
+- 已知測試限制：尚未導入 Testcontainers 與真實 Database Integration Tests。
+
+## Docker
 
 ```bash
-# macOS／Linux
-./mvnw spring-boot:run
+docker compose up --build
 ```
 
-啟動後可用 `GET http://localhost:8080/api/health` 檢查服務。
+啟動後：
 
-### 本機 Demo Accounts 與 Swagger JWT
+- Swagger UI：[http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+- Health API：[http://localhost:8080/api/health](http://localhost:8080/api/health)
 
-`manual-test` profile 會在帳號不存在時建立以下本機帳號：
+Docker environment 包含：
 
-| Username | Role |
-| --- | --- |
-| `stage5_rm` | RM |
-| `stage5_reviewer` | REVIEWER |
+- Multi-stage `Dockerfile`：Maven 3.9.11／Eclipse Temurin 21 build，Eclipse Temurin 21 JRE runtime。
+- PostgreSQL 16 container 與 database healthcheck。
+- App 透過 `depends_on: condition: service_healthy` 等待 database ready。
+- `postgres_data` named volume 保留 database data。
+- `.dockerignore` 排除 build output、Git／IDE metadata、logs 與 `.env`。
 
-帳號僅供本機測試使用，密碼不列於 README。在 Swagger UI 呼叫受保護 API：
+已驗證 image build、Compose config／up／down、Health、Swagger、volume 保留、container restart 與 cached rebuild。這是本機 packaging／execution environment；**production 仍部署於 Railway，database 仍使用 Neon PostgreSQL**。
 
-1. 呼叫 `POST /api/auth/login` 取得 JWT。
-2. 點選 **Authorize**，輸入 response 中的 `token`。
-3. 呼叫符合帳號 Role 的受保護 API。
+## Demo Flow
 
-使用 REST Client 時則加入：
-
-```http
-Authorization: Bearer <token>
-```
-
-完整 request 流程可參考 `api-test.http`。
-
-## Testing
-
-```powershell
-.\mvnw.cmd test
-.\mvnw.cmd package
-```
-
-- 目前共有 67 個 automated tests，全部通過。
-- GitHub Actions 會在 push／pull request 時自動執行 test 與 package。
-- 另外用 REST Client 跑過完整授信流程，包含登入、權限、Approve／Reject、Drawdown 與錯誤情境。
-- PostgreSQL 端也有確認資料寫入、額度扣減與 AuditLog。
-- Railway／Neon production 已驗證 Health、Swagger、RM／REVIEWER JWT 登入、Maker-Checker 與 RBAC。
-- Production 的 Approve 會建立 CreditLimit；成功 Drawdown 會扣減 `availableAmount`，超額請求回傳 409 且額度維持不變。
+1. 使用 RM 或 REVIEWER 帳號呼叫 `POST /api/auth/login` 取得 JWT。
+2. 建立 Company（V1 Company API 目前為 public）。
+3. RM 建立 `DRAFT` CreditApplication。
+4. RM Submit，案件進入 `SUBMITTED`。
+5. REVIEWER Approve 或 Reject；Maker-Checker 阻擋審核自己的案件。
+6. Approve 後自動建立 CreditLimit；Reject 不建立額度。
+7. RM 在可用額度內建立 Drawdown，系統同步扣減 `availableAmount`。
+8. Create／Submit／Approve／Reject／Drawdown 操作寫入 AuditLog。
 
 ## Known Limitations
 
-- V1 的 Company API 仍是 public，尚未套用 RBAC。
-- AuditLog 目前只負責寫入，還沒有查詢 API。
-- V1 聚焦核心授信流程，部分查詢與管理 API 尚未補齊；CreditReview service flow 也只允許一次審核。
-- 測試目前以 Unit／Security／Manual flow 為主，尚未加入 Testcontainers、真實 PostgreSQL rollback／concurrency，以及 invalid／expired JWT automated integration tests。
-- `created_by` 仍保留 legacy null 相容性。
-- Public Deployment 已使用 Railway／Neon 完成；Docker 與 Docker Compose 尚未實作。
+- Company API 尚未正式套用 RBAC。
+- AuditLog read API 尚未實作。
+- Testcontainers／Database Integration Tests 尚未實作。
+- 無前端 UI；Swagger UI 是主要 Demo 操作介面。
 
-## Project Documentation
+## Documentation
 
-詳細工程計畫與實作紀錄請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。
+完整工程計畫、Stage 歷史與驗證紀錄請參考 [PROJECT_PLAN.md](PROJECT_PLAN.md)。

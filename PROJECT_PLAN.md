@@ -270,7 +270,7 @@ Application Log 是營運／診斷用途的 Log。AuditLog 則是記錄何人在
 - Spring Boot Test Dependency
 - Spring Security Test Dependency
 
-JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI；Stage 10 已完成 springdoc-openapi、Swagger UI 與 JWT Bearer authorization；Stage 11 已完成 Railway／Neon Public Deployment。Docker／Docker Compose 是目前下一個 portfolio polish item；Testcontainers、Spring Batch 與 Scheduling 不納入目前作品收尾範圍。
+JWT Authentication 已於 Stage 5 完成；Stage 8 已使用 JUnit 5、Mockito 與 Spring Security Test 補強自動化測試，並設定 GitHub Actions CI；Stage 10 已完成 springdoc-openapi、Swagger UI 與 JWT Bearer authorization；Stage 11 已完成 Railway／Neon Public Deployment；Docker／Docker Compose environment setup 亦已完成並通過實際驗證。Testcontainers、Spring Batch 與 Scheduling 不納入目前作品收尾範圍。
 
 Lombok 不應大量依賴。Redis、Kafka、Kubernetes、Elasticsearch 與 Microservices 排除於 V1 範圍外。
 
@@ -437,7 +437,10 @@ Testcontainers 曾列為加分項，但目前不納入 portfolio 收尾範圍。
 - Production database、JWT 與 demo account credentials 全部由 Railway Variables 管理，不保存於 Git。
 - Production 使用 `SPRING_DATASOURCE_URL`、`DB_USERNAME`、`DB_PASSWORD` 與 `JWT_SECRET`；Demo initializer 使用 `DEMO_DATA_ENABLED`、`DEMO_RM_PASSWORD` 與 `DEMO_REVIEWER_PASSWORD`。
 - `DEMO_DATA_ENABLED` 僅在首次建立帳號時啟用，初始化完成後已設回 `false`。
-- Railway 目前直接建置 executable JAR；Docker／Docker Compose environment setup 尚未實作，列為下一個 portfolio polish item。
+- 已新增 multi-stage `Dockerfile`：build stage 使用 Maven 3.9.11／Eclipse Temurin 21，runtime stage 使用 Eclipse Temurin 21 JRE，並以 `app.jar` 啟動 Spring Boot、expose port 8080。
+- 已新增 `docker-compose.yml`：包含 Spring Boot `app` 與 PostgreSQL 16 `db`、database healthcheck、`service_healthy` dependency、`db:5432` datasource、app `8080:8080`、PostgreSQL `5432:5432`，以及 `postgres_data` named volume。
+- 已新增 `.dockerignore`，排除 `target`、`.git`、`.vscode`、`.idea`、`*.log` 與 `.env`。
+- Docker environment 已實際驗證 build、Compose config／up／down、PostgreSQL healthy、Spring Boot 啟動、Health API、Swagger UI、named volume 保留、服務重新啟動，以及再次 build 使用 cache。
 
 Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 或 Testing。
 
@@ -458,7 +461,7 @@ Deployment 工作不得排擠 Business Logic、Transaction 正確性、Security 
 | Stage 10 | OpenAPI／Swagger UI | Completed | 2026-09-10 |
 | Stage 11 | Railway／Neon Public Deployment／Production Demo Accounts | Completed | 2026-09-11 |
 
-Stage 0～11 已完成；目前只剩 Docker／Docker Compose environment setup 與 Docker 完成後的 GitHub README portfolio polish 兩個作品收尾項目。
+Stage 0～11 已完成；其後的 Docker／Docker Compose environment setup 亦已完成。目前 Remaining Work 只保留 GitHub README 最終 polish／portfolio packaging。
 
 ### Stage 10 — OpenAPI／Swagger UI（Completed）
 
@@ -481,7 +484,15 @@ Stage 0～11 已完成；目前只剩 Docker／Docker Compose environment setup 
 - Demo account password 沒有 source-code fallback；任一密碼缺少或空白時會以 `IllegalStateException` 阻止不完整設定啟動。
 - Production demo 初始化完成後，`DEMO_DATA_ENABLED` 已設回 `false`；未建立 `demo_admin`。
 - Railway／Neon 已完成 Health、Swagger、Login／JWT、RBAC、Maker-Checker、Approve／CreditLimit、Drawdown 與超額 rollback 行為驗證。
-- Docker／Docker Compose 尚未實作，現列為下一個 portfolio polish item。
+- Docker／Docker Compose 不納入 Stage 11 歷史範圍，已於 Stage 11 完成後作為 portfolio packaging 項目另行完成並驗證。
+
+### Post-Stage 11 — Docker／Docker Compose（Completed）
+
+- `Dockerfile` 採 multi-stage build：Maven 3.9.11／Eclipse Temurin 21 負責建置，Eclipse Temurin 21 JRE 負責執行 `app.jar`，服務使用 port 8080。
+- `docker-compose.yml` 包含 Spring Boot `app` 與 PostgreSQL 16 `db`；database healthcheck 通過後才啟動 app，應用程式透過 `db:5432` 連線。
+- 對外映射 app `8080:8080` 與 PostgreSQL `5432:5432`，database data 使用 `postgres_data` named volume 保存。
+- `.dockerignore` 已排除 build output、Git／IDE metadata、log 與 `.env`。
+- 已驗證 `docker build`、`docker compose config`、`docker compose up --build`、`GET /api/health`、Swagger UI、`docker compose down`、volume 保留、detached restart、service／health status，以及 cached rebuild，結果均成功。
 
 ### Original Schedule
 
@@ -499,19 +510,19 @@ Stage 0～11 已完成；目前只剩 Docker／Docker Compose environment setup 
 - Stage 8：原訂 9/6–9/7
 - Stage 9：原訂 9/8–9/10
 
-Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Railway／Neon Public Deployment 已於 2026-09-11 完成。Docker／Docker Compose environment setup 是目前下一個 portfolio polish item。
+Stage 10 OpenAPI／Swagger UI 已於 2026-09-10 完成；Stage 11 Railway／Neon Public Deployment 已於 2026-09-11 完成。Stage 11 後的 Docker／Docker Compose environment setup 亦已完成；Remaining Work 只保留 GitHub README 最終 polish／portfolio packaging。
 
 2026-09-08 後不得新增大型功能。
 
 ## 14. Current Status
 
-**Current Status：Stage 0～11 開發、部署與驗證已完成，專案已可公開使用**
+**Current Status：Stage 0～11 與 Docker／Docker Compose packaging、本機環境建置及驗證均已完成，專案已可公開使用**
 
-**Final Portfolio Polish：Docker／Docker Compose environment setup；完成後整理 GitHub README 最終版**
+**Remaining Work：GitHub README 最終 polish／portfolio packaging**
 
 - 前端 UI 已排除於本專案後續範圍，不新增 React、Next.js 或其他前端；Swagger UI 是主要 Demo 操作入口。
 - Swagger／OpenAPI 文件強化已完成：Controller operation／response、Request／Response DTO schema descriptions／examples、`ApiErrorResponse` schema、400／401／403／404／409 error response、Security 401／403 JSON body、成功回應 media type／schema 與 Swagger UI verification 均已完成。
-- 目前只剩 Docker／Docker Compose environment setup，以及 Docker 完成後的 GitHub README portfolio polish；不新增其他功能，README 本次不大幅改寫。
+- Docker／Docker Compose environment setup 已完成並通過實際驗證；目前只剩 GitHub README 最終 polish／portfolio packaging，不新增其他功能，README 本次不修改。
 
 - AppUser／Role 與對應 Repository、Flyway V4／V5 Migration 已完成；CreditApplication 會保存建立者 `createdBy`。
 - BCrypt PasswordEncoder、UserDetailsService、AuthenticationManager 與 Login API 已完成。
