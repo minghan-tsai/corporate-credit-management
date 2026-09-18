@@ -147,6 +147,7 @@ erDiagram
 - **67 automated tests**，目前為 0 failures／0 errors／0 skipped。
 - 使用 JUnit 5、Mockito 與 Spring Security Test 驗證 Business Rules、Transaction Boundary、RBAC、Maker-Checker 與錯誤回應。
 - GitHub Actions 在 push／pull request 執行 Maven `test` 與 `package`。
+- Railway 已連接 GitHub `main`，push 後會自動 build 並部署 production，形成 GitHub Actions CI + Railway CD 流程。
 - 已以 REST Client 與 PostgreSQL 人工驗證完整授信流程、Audit Trail、額度扣減與失敗 rollback。
 - Railway／Neon production 已驗證 Health、Swagger、JWT Login、RBAC、Maker-Checker、Approve／CreditLimit 與 Drawdown。
 - 已知測試限制：尚未導入 Testcontainers 與真實 Database Integration Tests。
