@@ -53,21 +53,20 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint((request, response, authenticationException) ->
-                                writeErrorResponse(
-                                        request,
-                                        response,
-                                        HttpStatus.UNAUTHORIZED,
-                                        "Authentication required",
-                                        objectMapper))
-                        .accessDeniedHandler((request, response, accessDeniedException) ->
-                                writeErrorResponse(
-                                        request,
-                                        response,
-                                        HttpStatus.FORBIDDEN,
-                                        "Access denied",
-                                        objectMapper)))
+                        .authenticationEntryPoint((request, response, authenticationException) -> writeErrorResponse(
+                                request,
+                                response,
+                                HttpStatus.UNAUTHORIZED,
+                                "Authentication required",
+                                objectMapper))
+                        .accessDeniedHandler((request, response, accessDeniedException) -> writeErrorResponse(
+                                request,
+                                response,
+                                HttpStatus.FORBIDDEN,
+                                "Access denied",
+                                objectMapper)))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/companies", "/api/companies/**").permitAll()
@@ -75,7 +74,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
                                 "/v3/api-docs",
-                                "/v3/api-docs/**").permitAll()
+                                "/v3/api-docs/**")
+                        .permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 // 先解析 Bearer token，再進入 Spring Security 的帳密驗證 filter 位置。
